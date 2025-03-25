@@ -54,7 +54,7 @@ Each message consists of:
 - Integrity: HMAC-SHA256 ensures messages aren't altered.
 - Authentication: `auth file` key and `card file` PIN validate parties.
 - Replay Prevention: Sequence numbers ensure message uniqueness.
-
+- diffie helman para autenticacao mutua com chave simetrica
 ## 3. Specific Attacks and Countermeasures
 
 Below are four attacks we've considered, with countermeasures implemented in our design.
@@ -86,7 +86,7 @@ Countermeasure: HMAC-SHA256 is computed over the encrypted payload and verified 
 Code: compute_hmac() and verify_hmac() in crypto.?
 Status: To implement
 
-## 4. Additional Nots
+## 4. Additional Notes
 - Error Handling: Invalid inputs (e.g. malformed JSON, missing `card file`) results in exit code 255. Protocol errors (e.g. timeouts, tampering) use exit code 63.
 - Prevent Denial of Service: `bank` can never exit with an error code or otherwise. That would be considered a denial of service attack.
 
