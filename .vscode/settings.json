@@ -1,0 +1,8 @@
+{
+"java.project.sourcePaths": [
+	"."
+],
+"java.project.referencedLibraries": [
+	"bcprov-lts8on-2.73.7.jar"
+]
+}
