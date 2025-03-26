@@ -12,13 +12,33 @@ import javax.crypto.spec.*;
 public class BankServer {
 	private static final int PORT = 3000;
 	private static final String AUTH_FILE = "bank.auth";
+	private static final String ARGS_PORT = "-p";
+	private static final String ARGS_AUTH_FILE = "-s";
 
 	public static void main(String[] args) {
+		int port = PORT;
+		String auth_file = AUTH_FILE;
 		try {
+			//tratar argumentos da consola
+			if(args.length > 4){
+				System.out.println("255");
+				return;
+			}
+
+			if(args[0].trim().equals(ARGS_PORT) && args[2].trim().equals(ARGS_AUTH_FILE)){
+				port = Integer.parseInt(args[1]);
+				auth_file = args[3].trim();
+			} else if(args[2].trim().equals(ARGS_PORT) && args[0].trim().equals(ARGS_AUTH_FILE)){
+				port = Integer.parseInt(args[3]);
+				auth_file = args[1].trim();
+			}
+
 			// Load the shared secret key from the auth file
-			SecretKeySpec key = loadKey(AUTH_FILE);
-			ServerSocket serverSocket = new ServerSocket(PORT);
-			System.out.println("Bank server listening on port " + PORT);
+			//SecretKeySpec key = loadKey(AUTH_FILE);
+			SecretKey key = generateKey(auth_file);
+			saveKeyOnFile(auth_file, key);
+			ServerSocket serverSocket = new ServerSocket(port);
+			System.out.println("Bank server listening on port " + port);
 
 			// Continuously accept client connections
 			while (true) {
@@ -38,13 +58,43 @@ public class BankServer {
 		return new SecretKeySpec(keyBytes, "AES");
 	}
 
+	private static SecretKey generateKey(String authFilePath) throws Exception {
+		//generate random AES key
+		KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+		keyGen.init(256);
+		SecretKey secretKey = keyGen.generateKey();
+		return secretKey;
+	}
+
+	private static void saveKeyOnFile(String filename, SecretKey key){
+		// save key in auth file
+		try {
+			File authFile = new File(filename);
+			if (authFile.createNewFile()) {
+				byte[] keyBytes = key.getEncoded();
+        		String encodedKey = Base64.getEncoder().encodeToString(keyBytes);
+        		try (FileWriter writer = new FileWriter(filename)) {
+            		writer.write(encodedKey);
+        		}
+				System.out.println("created");
+			} else {
+				System.out.println("255");
+			}
+		} catch (IOException e) {
+			System.out.println("Error saving file.");
+			//e.printStackTrace();
+		}
+	}
+
+
+
 	// Handles a client connection and performs the handshake.
 	private static class ConnectionHandler implements Runnable {
 		private Socket socket;
-		private SecretKeySpec key;
+		private SecretKey key;
 		private SecureSocket secureSocket;
 
-		public ConnectionHandler(Socket socket, SecretKeySpec key) {
+		public ConnectionHandler(Socket socket, SecretKey key) {
 			this.socket = socket;
 			this.key = key;
 		}
@@ -72,26 +122,28 @@ public class BankServer {
 		private boolean performHandshake() throws Exception {
 			// Step 1: Receive the client’s nonce message.
 			String clientMessage = secureSocket.receiveMessage();
-			if (!clientMessage.startsWith("CLIENT_NONCE:")) {
+			if (!clientMessage.equals("quem sou eu?")) {
 				return false;
 			}
-			String clientNonce = clientMessage.substring("CLIENT_NONCE:".length());
-			System.out.println("Received client nonce: " + clientNonce);
-
+			/* String clientNonce = clientMessage.substring("CLIENT_NONCE:".length());
+			System.out.println("Received client nonce: " + clientNonce); */
+			String id = "id";
+			String segredo = "segredo";
 			// Step 2: Generate bank nonce and send echo message.
 			byte[] bankNonceBytes = new byte[16];
 			new SecureRandom().nextBytes(bankNonceBytes);
 			String bankNonce = Base64.getEncoder().encodeToString(bankNonceBytes);
-			String responseMessage = "ECHO:" + clientNonce + ":BANK_NONCE:" + bankNonce;
+			String responseMessage = id + ":" + bankNonce;
 			secureSocket.sendMessage(responseMessage);
 			System.out.println("Sent echo with bank nonce: " + bankNonce);
 
 			// Step 3: Receive client’s echo of the bank nonce.
-			String finalMessage = secureSocket.receiveMessage();
+			/* String finalMessage = secureSocket.receiveMessage();
 			if (!finalMessage.equals("ECHO_BANK_NONCE:" + bankNonce)) {
 				return false;
 			}
 			System.out.println("Received valid echo of bank nonce.");
+			return true; */
 			return true;
 		}
 	}
@@ -101,9 +153,9 @@ public class BankServer {
 		private Socket socket;
 		private DataInputStream in;
 		private DataOutputStream out;
-		private SecretKeySpec key;
+		private SecretKey key;
 
-		public SecureSocket(Socket socket, SecretKeySpec key) throws IOException {
+		public SecureSocket(Socket socket, SecretKey key) throws IOException {
 			this.socket = socket;
 			this.key = key;
 			this.in = new DataInputStream(socket.getInputStream());
