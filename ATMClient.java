@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.crypto.*;
@@ -33,7 +34,7 @@ public class ATMClient {
 				System.out.println("Mutual authentication failed!");
 			}
 
-			//inputSanitization(args);
+			//inputValidation(args);
 
 
 			socket.close();
@@ -80,25 +81,24 @@ public class ATMClient {
 		return true; */
 	}
 
-	private static boolean inputValidation(String[] args) {
+	private static void inputValidation(String[] args) {
 
 		if (!(args == null || args.length == 0 || args.length > 4096)) {
 
 			//THIS LOOP IS JUST TO TEST
-			/*
+/*
 			Scanner scanner = new Scanner(System.in);
 			while (true) {
 
 				System.out.print("Enter some input: ");
 				String userInput = scanner.nextLine();
 
-				boolean value = accountValidation(userInput);
+				boolean value = portValidation(userInput);
 				System.out.println(value);
 			}*/
 
-
-			return true;
-		} else return false;
+			//return true;
+		} //else return false;
 
 	}
 
@@ -173,6 +173,53 @@ public class ATMClient {
 			Matcher matcher = pattern.matcher(input);
 
 			return matcher.matches();
+
+		} else return false;
+	}
+
+	/**
+	 *
+	 * @param input ip to be verified
+	 * @return true if it is a valid ip, false otherwise
+	 */
+	private static boolean ipValidation (String input) {
+		if (input != null && !input.isEmpty() && input.length() <= 16) {
+
+			String regex = "(\\b25[0-5]|\\b2[0-4][0-9]|\\b[01]?[0-9][0-9]?)(\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}";
+
+			Pattern pattern = Pattern.compile(regex);
+			Matcher matcher = pattern.matcher(input);
+
+			return matcher.matches();
+
+		} else return false;
+	}
+
+	/**
+	 * Validates a port if it is between 1024 and 65535
+	 *
+	 * @param input port to be verified
+	 * @return true if it is a valid port, false otherwise
+	 */
+	private static boolean portValidation (String input) {
+		if (input != null && !input.isEmpty() && input.length() <= 16) {
+
+			String regex = "^(102[4-9]|10[3-9][0-9]|1[1-9][0-9][0-9]|[2-9][0-9]{3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$";
+
+			Pattern pattern = Pattern.compile(regex);
+			Matcher matcher = pattern.matcher(input);
+
+			return matcher.matches();
+			/*
+			tested with this function
+			Random r = new Random();
+			int temp;
+			for (int i = 0; i <= 10000; i++) {
+				temp = r.nextInt(1024, 65536);
+				if (!portValidation(String.valueOf(temp))) {
+					System.out.println("Failed for port " + temp);
+				}
+			}*/
 
 		} else return false;
 	}
