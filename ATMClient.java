@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.crypto.*;
 import javax.crypto.spec.*;
+import java.util.Scanner;
 
 public class ATMClient {
 	private static final String SERVER_IP = "127.0.0.1";
@@ -19,6 +20,7 @@ public class ATMClient {
 	public static void main(String[] args) {
 		try {
 			// Load the shared secret key from the auth file.
+
 			SecretKey key = loadKey(AUTH_FILE);
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
 			System.out.println("Connected to server at " + SERVER_IP + ":" + SERVER_PORT);
@@ -31,7 +33,7 @@ public class ATMClient {
 				System.out.println("Mutual authentication failed!");
 			}
 
-			String normalizedInput = inputSanitization(args);
+			//inputSanitization(args);
 
 
 			socket.close();
@@ -76,6 +78,103 @@ public class ATMClient {
 		secureSocket.sendMessage("ECHO_BANK_NONCE:" + bankNonce);
 		System.out.println("Sent echo for bank nonce.");
 		return true; */
+	}
+
+	private static boolean inputValidation(String[] args) {
+
+		if (!(args == null || args.length == 0 || args.length > 4096)) {
+
+			//THIS LOOP IS JUST TO TEST
+			/*
+			Scanner scanner = new Scanner(System.in);
+			while (true) {
+
+				System.out.print("Enter some input: ");
+				String userInput = scanner.nextLine();
+
+				boolean value = accountValidation(userInput);
+				System.out.println(value);
+			}*/
+
+
+			return true;
+		} else return false;
+
+	}
+
+	/**
+	 *
+	 * @param input Number part to be validated
+	 * @return true if it corresponds to a number, false otherwise
+	 */
+	private static boolean numberValidation(String input) {
+		String regex = "0|[1-9][0-9]*";
+
+		Pattern pattern = Pattern.compile(regex);
+		Matcher matcher = pattern.matcher(input);
+
+		return matcher.matches();
+	}
+
+	/**
+	 * This function is supposed to receive ONLY the FRACTIONAL part of the number
+	 * example: 9487599.43 -> only the 43 passes through this function
+	 *
+	 * @param input fraction part of the number to be validated
+	 * @return true if it corresponds to a 2 decimal place fractional number, false otherwise
+	 */
+	private static boolean fractionValidation (String input) {
+		String regex = "[0-9]{2}";
+
+		Pattern pattern = Pattern.compile(regex);
+		Matcher matcher = pattern.matcher(input);
+
+		return matcher.matches();
+	}
+
+	/**
+	 *
+	 * Does it make sense to allowa multiple "."?
+	 *
+	 * @param input file name to be verified
+	 * @return true if it is a valid filename, false otherwise
+	 */
+	private static boolean fileValidation (String input) {
+		if (input != null && !input.isEmpty() && input.length() <= 127) {
+
+			String dotRegex = "^\\.$|^\\.\\.$";
+			Pattern dotPattern = Pattern.compile(dotRegex);
+
+			//if it isn't only "." ".."
+			if (!dotPattern.matcher(input).matches()) {
+
+				String regex = "^[\\-_\\.0-9a-z]+$";
+
+				Pattern pattern = Pattern.compile(regex);
+				Matcher matcher = pattern.matcher(input);
+
+				return matcher.matches();
+
+			}else return false;
+		} else return false;
+	}
+
+	/**
+	 *
+	 * @param input account name to be verified
+	 * @return true if it is a valid account name, false otherwise
+	 */
+	private static boolean accountValidation (String input) {
+		if (input != null && !input.isEmpty() && input.length() <= 122) {
+
+			String regex = "^[\\-_\\.0-9a-z]+$";
+
+			Pattern pattern = Pattern.compile(regex);
+			Matcher matcher = pattern.matcher(input);
+
+			return matcher.matches();
+
+		} else return false;
 	}
 
 	// SecureSocket helper class for encrypted and authenticated communication.
@@ -149,46 +248,6 @@ public class ATMClient {
 			cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
 			byte[] decrypted = cipher.doFinal(encrypted);
 			return new String(decrypted, StandardCharsets.UTF_8);
-		}
-
-		private String inputSanitization (String[] args) {
-
-			if (!(args == null || args.length == 0 || args.length > 4096)) {
-
-
-
-
-				return "nice";
-			} else return null; //mudar isto
-
-		}
-
-		/**
-		 *
-		 * @param input Number part to be validated
-		 * @return true if it corresponds to a number, false otherwise
-		 */
-		private boolean numberValidation (String input) {
-			String regex = "0|[1-9][0-9]*";
-
-			Pattern pattern = Pattern.compile(regex);
-			Matcher matcher = pattern.matcher(input);
-
-			return matcher.matches();
-		}
-
-		/**
-		 *
-		 * @param input fraction part of the number to be validated
-		 * @return true if it corresponds to a valid fractional number, false otherwise
-		 */
-		private boolean fractionValidation (String input) {
-			String regex = "[0-9]{2}";
-
-			Pattern pattern = Pattern.compile(regex);
-			Matcher matcher = pattern.matcher(input);
-
-			return matcher.matches();
 		}
 	}
 }
