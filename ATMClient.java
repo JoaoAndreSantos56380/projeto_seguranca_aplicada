@@ -6,6 +6,8 @@ import java.nio.file.Paths;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.crypto.*;
 import javax.crypto.spec.*;
 
@@ -19,7 +21,7 @@ public class ATMClient {
 			// Load the shared secret key from the auth file.
 			SecretKey key = loadKey(AUTH_FILE);
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
-			//System.out.println("Connected to server at " + SERVER_IP + ":" + SERVER_PORT);
+			System.out.println("Connected to server at " + SERVER_IP + ":" + SERVER_PORT);
 
 			SecureSocket secureSocket = new SecureSocket(socket, key);
 			if (performHandshake(secureSocket)) {
@@ -28,6 +30,10 @@ public class ATMClient {
 			} else {
 				System.out.println("Mutual authentication failed!");
 			}
+
+			String normalizedInput = inputSanitization(args);
+
+
 			socket.close();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -143,6 +149,46 @@ public class ATMClient {
 			cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
 			byte[] decrypted = cipher.doFinal(encrypted);
 			return new String(decrypted, StandardCharsets.UTF_8);
+		}
+
+		private String inputSanitization (String[] args) {
+
+			if (!(args == null || args.length == 0 || args.length > 4096)) {
+
+
+
+
+				return "nice";
+			} else return null; //mudar isto
+
+		}
+
+		/**
+		 *
+		 * @param input Number part to be validated
+		 * @return true if it corresponds to a number, false otherwise
+		 */
+		private boolean numberValidation (String input) {
+			String regex = "0|[1-9][0-9]*";
+
+			Pattern pattern = Pattern.compile(regex);
+			Matcher matcher = pattern.matcher(input);
+
+			return matcher.matches();
+		}
+
+		/**
+		 *
+		 * @param input fraction part of the number to be validated
+		 * @return true if it corresponds to a valid fractional number, false otherwise
+		 */
+		private boolean fractionValidation (String input) {
+			String regex = "[0-9]{2}";
+
+			Pattern pattern = Pattern.compile(regex);
+			Matcher matcher = pattern.matcher(input);
+
+			return matcher.matches();
 		}
 	}
 }
