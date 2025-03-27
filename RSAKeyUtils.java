@@ -5,9 +5,11 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.KeyFactory;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 
 import javax.crypto.Cipher;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -71,5 +73,45 @@ public class RSAKeyUtils {
 	public static byte[] convertPublicKeyToBytes(PublicKey publicKey) {
 		// The getEncoded() method returns the key in its default X.509 encoded format.
 		return publicKey.getEncoded();
+	}
+
+	public static byte[] encryptData(byte[] data, PublicKey publicKey) throws Exception {
+		// Create and initialize the RSA cipher for encryption with PKCS#1 padding
+		Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+		cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+
+		// Maximum chunk size: 245 bytes for a 2048-bit key with PKCS#1 padding
+		int maxChunkSize = 245;
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+		// Process each chunk
+		for (int i = 0; i < data.length; i += maxChunkSize) {
+			int chunkSize = Math.min(maxChunkSize, data.length - i);
+			byte[] chunk = Arrays.copyOfRange(data, i, i + chunkSize);
+			byte[] encryptedChunk = cipher.doFinal(chunk);
+			outputStream.write(encryptedChunk);
+		}
+
+		return outputStream.toByteArray();
+	}
+
+	public static byte[] decryptData(byte[] encryptedData, PrivateKey privateKey) throws Exception {
+		// Create and initialize the RSA cipher for decryption with PKCS#1 padding
+		Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+		cipher.init(Cipher.DECRYPT_MODE, privateKey);
+
+		// Each encrypted block is 256 bytes (for a 2048-bit RSA key)
+		int encryptedChunkSize = 256;
+		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+		// Process each chunk
+		for (int i = 0; i < encryptedData.length; i += encryptedChunkSize) {
+			int chunkSize = Math.min(encryptedChunkSize, encryptedData.length - i);
+			byte[] chunk = Arrays.copyOfRange(encryptedData, i, i + chunkSize);
+			byte[] decryptedChunk = cipher.doFinal(chunk);
+			outputStream.write(decryptedChunk);
+		}
+
+		return outputStream.toByteArray();
 	}
 }

@@ -37,7 +37,7 @@ public class BankServer {
 
 			KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
 			RSAKeyUtils.savePublicKey(rsaKeyPair.getPublic(), auth_file);
-			
+			//System.out.println("chave publica banco: " + rsaKeyPair.getPublic().toString());
 			ServerSocket serverSocket = new ServerSocket(port);
 			System.out.println("Bank server listening on port " + port);
 
@@ -101,12 +101,6 @@ public class BankServer {
 			this.keyPair = keyPair;
 		}
 
-		public ConnectionHandler(Socket socket) {
-			this.socket = socket;
-		}
-
-
-
 		public void run() {
 			try {
 				secureSocket = new SecureSocket(socket, keyPair);
@@ -130,9 +124,10 @@ public class BankServer {
 		private boolean performHandshake() throws Exception {
 			// Step 1: Receive the client’s public key.
 			byte[] clientMessage = secureSocket.receiveMessage();
-			byte[] atmPublicKeyBytes = RSAKeyUtils.decryptWithPrivateKey(clientMessage, keyPair.getPrivate());
+			byte[] atmPublicKeyBytes = RSAKeyUtils.decryptData(clientMessage, secureSocket.keyPair.getPrivate());
 			PublicKey atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
 			this.atmPublicKey = atmPublicKey;
+			//System.out.println("public key do atm: " + atmPublicKey.toString());
 			return true;
 		}
 	}
@@ -158,7 +153,7 @@ public class BankServer {
 
 		// Reads, verifies HMAC, and decrypts a received message.
 		public byte[] receiveMessage() throws Exception {
-			return (byte[]) in.readObject();
+			return (byte[]) this.in.readObject();
 		}
 	}
 }

@@ -24,7 +24,9 @@ public class ATMClient {
 		try {
 			// Load the shared secret key from the auth file.
 			KeyPair atmKeyPair = RSAKeyUtils.generateRSAKeyPair();
+			//System.out.println("chave publica atm: " + atmKeyPair.getPublic().toString());
 			PublicKey bankPublicKey = RSAKeyUtils.readPublicKey(AUTH_FILE);
+			//System.out.println("chave publica banco: " + bankPublicKey.toString());
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
 			System.out.println("Connected to server at " + SERVER_IP + ":" + SERVER_PORT);
 
@@ -47,7 +49,8 @@ public class ATMClient {
 
 	// Implements the handshake protocol.
 	private static boolean performHandshake(SecureSocket secureSocket) throws Exception {
-		byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptWithPublicKey(secureSocket.bankPublicKey.getEncoded(), secureSocket.atmKeyPair.getPublic());
+		//byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptWithPublicKey(secureSocket.bankPublicKey.getEncoded(), secureSocket.atmKeyPair.getPublic());
+		byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptData(secureSocket.atmKeyPair.getPublic().getEncoded(), secureSocket.bankPublicKey);
 		secureSocket.sendMessage(atmPublicKeyEncrypted);
 		return true;
 	}
@@ -207,8 +210,8 @@ public class ATMClient {
 			this.socket = socket;
 			this.atmKeyPair = atmKeyPair;
 			this.bankPublicKey = bankPublicKey;
-			this.in = new ObjectInputStream(this.socket.getInputStream());
 			this.out = new ObjectOutputStream(this.socket.getOutputStream());
+			this.in = new ObjectInputStream(this.socket.getInputStream());
 		}
 
 		public SecureSocket(Socket socket) throws IOException {
@@ -223,7 +226,7 @@ public class ATMClient {
 		}
 
 		public void sendMessage(byte[] message) throws Exception {
-			out.writeObject(message);
+			this.out.writeObject(message);
 		}
 
 		public byte[] receiveMessage() throws Exception {
