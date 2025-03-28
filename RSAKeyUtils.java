@@ -3,6 +3,7 @@ import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.Signature;
 import java.security.KeyFactory;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
@@ -10,10 +11,6 @@ import java.util.Arrays;
 import javax.crypto.Cipher;
 
 import java.io.ByteArrayOutputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 public class RSAKeyUtils {
 
@@ -22,28 +19,6 @@ public class RSAKeyUtils {
 		KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
 		keyGen.initialize(2048); // You can choose a key size (e.g., 2048 bits)
 		return keyGen.generateKeyPair();
-	}
-
-	// Function 2: Save the Public Key to a File
-	//TODO passar para fileutils
-	public static void savePublicKey(PublicKey publicKey, String fileName) throws IOException {
-		// Get the encoded format of the public key
-		byte[] keyBytes = publicKey.getEncoded();
-		try (FileOutputStream fos = new FileOutputStream(fileName)) {
-			fos.write(keyBytes);
-		}
-	}
-
-	// Function 3: Read the Public Key from a File
-	// TODO passar para fileutils
-	public static PublicKey readPublicKey(String fileName) throws Exception {
-		// Read the key bytes from the file
-		byte[] keyBytes = Files.readAllBytes(Paths.get(fileName));
-		// Create a key specification from the encoded bytes
-		X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
-		// Create a KeyFactory for RSA and generate the PublicKey
-		KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-		return keyFactory.generatePublic(spec);
 	}
 
 	// Encrypts the given message using the RSA private key.
@@ -113,5 +88,19 @@ public class RSAKeyUtils {
 		}
 
 		return outputStream.toByteArray();
+	}
+
+	public static byte[] signData(byte[] data, PrivateKey privateKey) throws Exception {
+		Signature signer = Signature.getInstance("SHA256withRSA");
+		signer.initSign(privateKey);
+		signer.update(data);
+		return signer.sign();
+	}
+
+	public static boolean verifySignature(byte[] data, byte[] signature, PublicKey publicKey) throws Exception {
+		Signature verifier = Signature.getInstance("SHA256withRSA");
+		verifier.initVerify(publicKey);
+		verifier.update(data);
+		return verifier.verify(signature);
 	}
 }
