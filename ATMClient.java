@@ -1,19 +1,18 @@
-import java.io.*;
-import java.net.*;
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.SecureRandom;
 import java.util.Arrays;
-import java.util.Base64;
-import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.crypto.*;
-import javax.crypto.spec.*;
-import java.util.Scanner;
+import java.net.Socket;
+import java.security.KeyFactory;
+import java.security.KeyPairGenerator;
+import java.security.Security;
+import java.security.spec.X509EncodedKeySpec;
+import javax.crypto.KeyAgreement;
+
+import org.bouncycastle.jce.ECNamedCurveTable;
+import org.bouncycastle.jce.spec.ECParameterSpec;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class ATMClient {
 	private static final String SERVER_IP = "127.0.0.1";
@@ -22,13 +21,11 @@ public class ATMClient {
 
 	public static void main(String[] args) {
 		try {
-			// Load the shared secret key from the auth file.
+			Security.addProvider(new BouncyCastleProvider());
 			KeyPair atmKeyPair = RSAKeyUtils.generateRSAKeyPair();
-			//System.out.println("chave publica atm: " + atmKeyPair.getPublic().toString());
-			PublicKey bankPublicKey = RSAKeyUtils.readPublicKey(AUTH_FILE);
-			//System.out.println("chave publica banco: " + bankPublicKey.toString());
+			// Load the shared secret key from the auth file.
+			PublicKey bankPublicKey = FileUtils.readPublicKey(AUTH_FILE);
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
-			System.out.println("Connected to server at " + SERVER_IP + ":" + SERVER_PORT);
 
 			SecureSocket secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
 			if (performHandshake(secureSocket)) {
@@ -50,8 +47,54 @@ public class ATMClient {
 	// Implements the handshake protocol.
 	private static boolean performHandshake(SecureSocket secureSocket) throws Exception {
 		//byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptWithPublicKey(secureSocket.bankPublicKey.getEncoded(), secureSocket.atmKeyPair.getPublic());
-		byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptData(secureSocket.atmKeyPair.getPublic().getEncoded(), secureSocket.bankPublicKey);
+		byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptData(secureSocket.getKeyPair().getPublic()/* secureSocket.atmKeyPair.getPublic() */.getEncoded(), secureSocket.getBankPublicKey()/* secureSocket.bankPublicKey */);
 		secureSocket.sendMessage(atmPublicKeyEncrypted);
+
+		// Generate an ephemeral ECDH key pair.
+		ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
+		KeyPairGenerator keyGen = KeyPairGenerator.getInstance("ECDH", "BC");
+		keyGen.initialize(ecSpec);
+		KeyPair ecdhKeyPair = keyGen.generateKeyPair();
+		byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
+
+		// Sign the ECDH public key using the client's RSA private key.
+		byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, secureSocket.getKeyPair().getPrivate()/* secureSocket.atmKeyPair.getPrivate() */);
+
+		// Receive the server's ECDH public key and RSA signature.
+		byte[] serverEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
+		byte[] serverSignature = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
+		System.out.println("Received server's ECDH public key and RSA signature.");
+
+		// Verify the server's signature using the server's RSA public key.
+		if (!RSAKeyUtils.verifySignature(serverEcdhPubKeyEncoded, serverSignature, secureSocket.getBankPublicKey()/* secureSocket.bankPublicKey */)) {
+			secureSocket.close();//secureSocket.socket.close(); // socket.close();
+			throw new SecurityException("Server's RSA signature verification failed!");
+		}
+		System.out.println("Server's RSA signature verified.");
+
+		// Send the client's ECDH public key and RSA signature.
+		secureSocket.sendMessage(ecdhPubKeyEncoded); // oos.writeObject(ecdhPubKeyEncoded);
+		secureSocket.sendMessage(signature);// oos.writeObject(signature);
+		secureSocket.flush();// oos.flush();
+		System.out.println("Sent client's ECDH public key and RSA signature.");
+
+		// Reconstruct the server's ECDH public key.
+		KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
+		X509EncodedKeySpec keySpec = new X509EncodedKeySpec(serverEcdhPubKeyEncoded);
+		PublicKey serverEcdhPubKey = keyFactory.generatePublic(keySpec);
+
+		// Perform the ECDH key agreement.
+		KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
+		keyAgree.init(ecdhKeyPair.getPrivate());
+		keyAgree.doPhase(serverEcdhPubKey, true);
+		byte[] sharedSecret = keyAgree.generateSecret();
+		System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
+
+		/* ois.close();
+		oos.close();
+		socket.close(); */
+
+
 		return true;
 	}
 
@@ -199,7 +242,7 @@ public class ATMClient {
 	}
 
 	// SecureSocket helper class for encrypted and authenticated communication.
-	private static class SecureSocket {
+	/* private static class SecureSocket {
 		private Socket socket;
 		private ObjectInputStream in;
 		private ObjectOutputStream out;
@@ -232,5 +275,22 @@ public class ATMClient {
 		public byte[] receiveMessage() throws Exception {
 			return (byte[]) in.readObject();
 		}
-	}
+
+		public void close(){
+			try {
+				this.socket.close();
+			} catch (IOException e) {
+				//e.printStackTrace();
+				System.out.println("senhora socket nao quis fechar");
+			}
+		}
+
+		public void flush(){
+			try {
+				this.out.flush();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	} */
 }
