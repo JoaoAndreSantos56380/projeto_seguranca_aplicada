@@ -4,6 +4,9 @@ import java.nio.file.Paths;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import javax.crypto.*;
 import javax.crypto.spec.*;
 
@@ -24,12 +27,15 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class BankServer {
+	private static final boolean debug = false;
 	private static final int PORT = 3000;
+	private static final int EXIT_FAILURE = 255;
 	private static final String AUTH_FILE = "bank.auth";
 	private static final String ARGS_PORT = "-p";
 	private static final String ARGS_AUTH_FILE = "-s";
 
 	public static void main(String[] args) {
+		validateArgs(args);
 		Security.addProvider(new BouncyCastleProvider());
 		int port = PORT;
 		String auth_file = AUTH_FILE;
@@ -67,43 +73,6 @@ public class BankServer {
 			e.printStackTrace();
 		}
 	}
-
-	// Reads a Base64-encoded key from the auth file.
-	private static SecretKeySpec loadKey(String authFilePath) throws Exception {
-		String keyString = new String(Files.readAllBytes(Paths.get(authFilePath))).trim();
-		byte[] keyBytes = Base64.getDecoder().decode(keyString);
-		return new SecretKeySpec(keyBytes, "AES");
-	}
-
-	private static SecretKey generateKey(String authFilePath) throws Exception {
-		//generate random AES key
-		KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-		keyGen.init(256);
-		SecretKey secretKey = keyGen.generateKey();
-		return secretKey;
-	}
-
-	private static void saveKeyOnFile(String filename, SecretKey key){
-		// save key in auth file
-		try {
-			File authFile = new File(filename);
-			if (authFile.createNewFile()) {
-				byte[] keyBytes = key.getEncoded();
-        		String encodedKey = Base64.getEncoder().encodeToString(keyBytes);
-        		try (FileWriter writer = new FileWriter(filename)) {
-            		writer.write(encodedKey);
-        		}
-				System.out.println("created");
-			} else {
-				System.out.println("255");
-			}
-		} catch (IOException e) {
-			System.out.println("Error saving file.");
-			//e.printStackTrace();
-		}
-	}
-
-
 
 	// Handles a client connection and performs the handshake.
 	private static class ConnectionHandler implements Runnable {
@@ -185,60 +154,118 @@ public class BankServer {
 			keyAgree.doPhase(clientEcdhPubKey, true);
 			byte[] sharedSecret = keyAgree.generateSecret();
 			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
-
-			/* ois.close();
-			oos.close();
-			socket.close();
-			serverSocket.close(); */
-
-			//System.out.println("public key do atm: " + atmPublicKey.toString());
 			return true;
 		}
 	}
 
-	/* // SecureSocket helper class for encrypted and authenticated communication.
-	private static class SecureSocket {
-		private Socket socket;
-		private ObjectInputStream in;
-		private ObjectOutputStream out;
-		private KeyPair keyPair;
-
-		public SecureSocket(Socket socket, KeyPair keyPair) throws IOException {
-			this.socket = socket;
-			this.keyPair = keyPair;
-			this.in = new ObjectInputStream(socket.getInputStream());
-			this.out = new ObjectOutputStream(socket.getOutputStream());
+	private static void validateArgs(String[] args) {
+		if (args.length > 4) {
+			printUsage(debug);
+			// TODO fazer saida suave: cleanExit()
+			System.exit(EXIT_FAILURE);
 		}
 
-		public void sendMessage(String message) throws Exception {
-			this.out.writeObject(message);
-		}
+		for (int i = 0; i < args.length; i += 2) {
+			if (args[i].startsWith("-s")) {
+				String authFilePath = extractArg("-s", i, args);
+				fileValidation(authFilePath);
+			} else if (args[i].startsWith("-p")) {
+				String port = extractArg("-p", i, args);
+				portValidation(port);
 
-		public void sendMessage(byte[] message) throws Exception {
-			this.out.writeObject(message);
-		}
-
-		// Reads, verifies HMAC, and decrypts a received message.
-		public byte[] receiveMessage() throws Exception {
-			return (byte[]) this.in.readObject();
-		}
-
-		public void close(){
-			try {
-				this.socket.close();
-			} catch (IOException e) {
-				//e.printStackTrace();
-				System.out.println("senhora socket nao quis fechar");
+			} else { // Invalid argument
+				printUsage(debug);
+				// TODO fazer saida suave: cleanExit()
+				System.exit(EXIT_FAILURE);
 			}
 		}
+	}
 
-		public void flush(){
-			try {
-				this.out.flush();
-			} catch (IOException e) {
-				//
-				e.printStackTrace();
-			}
+	/**
+	 * Validates a port if it is between 1024 and 65535
+	 *
+	 * @param input port to be verified
+	 * @return true if it is a valid port, false otherwise
+	 */
+	private static void portValidation(String input) {
+		if (!canConvertStringToInt(input)) {
+			cleanExit();
 		}
-	} */
+
+		int port = Integer.parseInt(input);
+		if (port < 1024 || port > 65535) {
+			cleanExit();
+		}
+	}
+
+	private static boolean canConvertStringToInt(String str) {
+		try {
+			Integer.parseInt(str);
+		} catch (Exception e) {
+			return false;
+		}
+		return true;
+	}
+
+	private static void cleanExit() {
+		printUsage(debug);
+		// TODO fazer saida suave: cleanExit()
+		System.exit(EXIT_FAILURE);
+	}
+
+	private static boolean fileValidation(String filename) {
+		if (filename == null) {
+			cleanExit();
+		}
+		if (filename.isEmpty()) {
+			cleanExit();
+		}
+		if (filename.length() > 127) {
+			cleanExit();
+		}
+
+		// String dotRegex = "^\\.$|^\\.\\.$";
+		// Pattern dotPattern = Pattern.compile(dotRegex);
+
+		String filenameRegex = "^[\\-_\\.0-9a-z]+$";
+		Pattern pattern = Pattern.compile(filenameRegex);
+		Matcher matcher = pattern.matcher(filename);
+
+		File file = new File(filename);
+		if (!file.exists()) {
+			System.out.print(debug ? String.format("%s: not such file\n", filename) : "");
+			cleanExit();
+			/*
+			 * printUsage(debug);
+			 * // TODO fazer saida suave: cleanExit()
+			 * System.exit(EXIT_FAILURE);
+			 */
+		}
+
+		return matcher.matches();
+	}
+
+	private static String extractArg(String option, int i, String[] args) {
+		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
+			printUsage(debug);
+			// TODO fazer saida suave: cleanExit()
+			System.exit(EXIT_FAILURE);
+		}
+		return args[i].equals(option) ? args[i + 1] : option.substring(2);
+	}
+
+	private static void printUsage(boolean verbose) {
+		System.out.println("Usage: ATMClient [-s <auth-file>] [-i <ip-address>] [-p <port>]");
+		System.out.println("                 [-c <card-file>] -a <account> -n <balance>");
+		System.out.println("Options:");
+		System.out.println("  -s <auth-file>   : Authentication file (default: bank.auth)");
+		System.out.println("  -i <ip-address>  : Server IP address (default: 127.0.0.1)");
+		System.out.println("  -p <port>        : Server port (default: 3000)");
+		System.out.println("  -c <card-file>   : Card file (default: <account>.card)");
+		System.out.println("  -a <account>     : Account name (required)");
+		System.out.println("  -n <balance>     : Create new account with balance amount (format: XX.XX)");
+		System.out.println("  -d <balance>     : Deposit balance amount (format: XX.XX)");
+		System.out.println("  -w <balance>     : Withdraw balance amount (format: XX.XX)");
+		System.out.println("  -g				 : Get balance amount (format: XX.XX)");
+	}
 }
