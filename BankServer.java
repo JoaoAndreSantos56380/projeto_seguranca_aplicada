@@ -33,8 +33,9 @@ public class BankServer {
 	private static final String AUTH_FILE = "bank.auth";
 	private static final String ARGS_PORT = "-p";
 	private static final String ARGS_AUTH_FILE = "-s";
+	private static ServerSocket serverSocket;
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws IOException {
 		validateArgs(args);
 		Security.addProvider(new BouncyCastleProvider());
 		int port = PORT;
@@ -60,7 +61,7 @@ public class BankServer {
 			KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
 			FileUtils.savePublicKey(rsaKeyPair.getPublic(), auth_file);
 			//System.out.println("chave publica banco: " + rsaKeyPair.getPublic().toString());
-			ServerSocket serverSocket = new ServerSocket(port);
+			serverSocket = new ServerSocket(port);
 			System.out.println("Bank server listening on port " + port);
 
 			// Continuously accept client connections
@@ -158,7 +159,7 @@ public class BankServer {
 		}
 	}
 
-	private static void validateArgs(String[] args) {
+	private static void validateArgs(String[] args) throws IOException {
 		if (args.length > 4) {
 			printUsage(debug);
 			// TODO fazer saida suave: cleanExit()
@@ -187,7 +188,7 @@ public class BankServer {
 	 * @param input port to be verified
 	 * @return true if it is a valid port, false otherwise
 	 */
-	private static void portValidation(String input) {
+	private static void portValidation(String input) throws IOException {
 		if (!canConvertStringToInt(input)) {
 			cleanExit();
 		}
@@ -207,13 +208,16 @@ public class BankServer {
 		return true;
 	}
 
-	private static void cleanExit() {
+	private static void cleanExit() throws IOException {
 		printUsage(debug);
-		// TODO fazer saida suave: cleanExit()
+		//nao eh necessario mas eh uma boa pratica
+		if (!serverSocket.isClosed()) {
+			serverSocket.close();
+		}
 		System.exit(EXIT_FAILURE);
 	}
 
-	private static boolean fileValidation(String filename) {
+	private static boolean fileValidation(String filename) throws IOException {
 		if (filename == null) {
 			cleanExit();
 		}
