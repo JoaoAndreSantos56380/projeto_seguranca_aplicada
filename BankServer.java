@@ -20,6 +20,7 @@ import java.util.Arrays;
 
 import javax.crypto.KeyAgreement;
 
+import java.util.Random;
 //TODO verificar se ficheiro fornecido pelo input do user ja existe. se sim sair
 
 import org.bouncycastle.jce.ECNamedCurveTable;
@@ -34,6 +35,9 @@ public class BankServer {
 	private static final String ARGS_PORT = "-p";
 	private static final String ARGS_AUTH_FILE = "-s";
 	private static ServerSocket serverSocket;
+	private static final Random random = new Random();
+	private static int SequenceNumber = random.nextInt(100000 - 100 + 1) + 100;
+	private static Accounts[] accounts;
 
 	public static void main(String[] args) throws IOException {
 		validateArgs(args);
@@ -81,6 +85,7 @@ public class BankServer {
 		private KeyPair keyPair;
 		private SecureSocket secureSocket;
 		private PublicKey atmPublicKey;
+		private byte[] sharedSecret;
 
 		public ConnectionHandler(Socket socket, KeyPair keyPair) {
 			this.socket = socket;
@@ -89,10 +94,68 @@ public class BankServer {
 
 		public void run() {
 			try {
+				
 				secureSocket = new SecureSocket(socket, keyPair);
-				if (performHandshake()) {
+				if (performHandshake()) {	
 					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
-					// Further processing (e.g., transaction handling) would follow here.
+					// Further processing (e.g., transaction handling) would follow here
+					ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+
+					// Send Sequential Number
+					byte[] EncryptedMessageSend = ECDHKey.encrypt(String.valueOf(SequenceNumber));
+					secureSocket.sendMessage(EncryptedMessageSend);	
+
+					// Receive Client Arguments With the right Sequential Number
+					byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
+					String ClientArguments = ECDHKey.decrypt(EncryptedMessageReceive);
+					String[] ClientArgs = ClientArguments.split(" ");
+
+					for (String word : ClientArgs){
+						System.out.println(word);
+					}
+
+					
+					// Validate Sequence Number for Replay attacks
+					if (ClientArgs[ClientArgs.length-1].equals(String.valueOf(SequenceNumber))){
+						SequenceNumber++;	
+
+						// Arguments Processing
+						Accounts Account = new Accounts();
+						Boolean createAccount = false, deposit = false, withdraw = false, get = false;
+						int CounterOperations=0;
+
+						for (int i = 0;i<ClientArgs.length-1;i=i+2){
+							switch (ClientArgs[i]){
+								case "-c":
+									Account.setCardFile(ClientArgs[i+1]);
+								break;
+								case "-a":
+									Account.setName(ClientArgs[i+1]);
+								break;
+								case "-n":
+									createAccount = true;
+									Account.setBalance(Double.parseDouble(ClientArgs[i+1]));
+									CounterOperations++;
+								break;
+								case "-d":
+									deposit = true;
+									Account.addBalance(Double.parseDouble(ClientArgs[i+1]));
+									CounterOperations++;
+								break;
+								case "-w":
+									withdraw = true;
+									Account.LessBalance(Double.parseDouble(ClientArgs[i+1]));
+									CounterOperations++;
+								break;
+								case "-g":
+									get = true;
+								break;
+							}
+							if (CounterOperations==1){
+								
+							}
+						}				
+					}
 				} else {
 					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
 				}
@@ -153,8 +216,9 @@ public class BankServer {
 			KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
 			keyAgree.init(ecdhKeyPair.getPrivate());
 			keyAgree.doPhase(clientEcdhPubKey, true);
-			byte[] sharedSecret = keyAgree.generateSecret();
-			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
+			sharedSecret = keyAgree.generateSecret();
+
+			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));					
 			return true;
 		}
 	}

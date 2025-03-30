@@ -23,6 +23,7 @@ public class ATMClient {
 	private static final int SERVER_PORT = 3000;
 	private static final String AUTH_FILE = "bank.auth"; // Shared auth file
 	private static SecureSocket secureSocket = null;
+	private static byte[] sharedSecret;
 
 	public static void main(String[] args) {
 		try {
@@ -37,6 +38,18 @@ public class ATMClient {
 			if (performHandshake(secureSocket)) {
 				System.out.println("Mutual authentication successful!");
 				// Further processing after authentication can follow here.
+				ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+				try{
+					byte[] EncryptedMsg = secureSocket.receiveMessage();
+					String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
+					String arguments = String.join(" ", args);
+					arguments = arguments + " " + SequenceNumber;
+					byte[] MessageArgs = ECDHKey.encrypt(arguments);
+					secureSocket.sendMessage(MessageArgs);
+				}
+				catch(Exception e){
+
+				}				
 			} else {
 				System.out.println("Mutual authentication failed!");
 			}
@@ -92,7 +105,7 @@ public class ATMClient {
 		KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
 		keyAgree.init(ecdhKeyPair.getPrivate());
 		keyAgree.doPhase(serverEcdhPubKey, true);
-		byte[] sharedSecret = keyAgree.generateSecret();
+		sharedSecret = keyAgree.generateSecret();
 		System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
 
 		return true;
