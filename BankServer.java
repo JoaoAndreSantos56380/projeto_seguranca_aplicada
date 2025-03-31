@@ -1,5 +1,7 @@
 import java.io.*;
 import java.security.*;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -9,6 +11,8 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 
 import javax.crypto.KeyAgreement;
+
+import java.util.Random;
 //TODO verificar se ficheiro fornecido pelo input do user ja existe. se sim sair
 
 import org.bouncycastle.jce.ECNamedCurveTable;
@@ -19,17 +23,11 @@ public class BankServer {
 	// Constants
 	private static final boolean debug = false;
 	private static final String ARGS_AUTH_FILE = "-s";
-	private static final String DEFAULT_AUTH_FILE = "bank.auth";
-	private static final String ARGS_PORT = "-p";
-	private static final int DEFAULT_PORT = 3000;
-	private static final int EXIT_FAILURE = 255;
+	private static ServerSocket serverSocket;
+	private static final SecureRandom random = new SecureRandom();
+	private static int SequenceNumber = genSeq();
 
-	// Attributes
-	private ServerConfig config;
-	private ServerSocket serverSocket;
-	private final SecureRandom random = new SecureRandom();
-	private int SequenceNumber = genSeq();
-	private Accounts[] accounts;
+	private static Accounts[] accounts;
 
 	public static void main(String[] args) throws IOException {
 		new BankServer(args);
@@ -43,14 +41,29 @@ public class BankServer {
 
 		config = getConfigFromArgs(args);
 
-		Security.addProvider(new BouncyCastleProvider());
-		try {
-			KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
-			FileUtils.savePublicKey(rsaKeyPair.getPublic(), config.authFile);
-			// System.out.println("chave publica banco: " +
-			// rsaKeyPair.getPublic().toString());
-			serverSocket = new ServerSocket(config.port);
-			System.out.println("Bank server listening on port " + config.port);
+			Security.addProvider(new BouncyCastleProvider());
+			int port = PORT;
+			String auth_file = AUTH_FILE;
+			try {
+				//tratar argumentos da consola
+				if (args.length > 4) {
+					System.out.println("255");
+					return;
+				} else if (args.length != 0) {
+					if (args[0].trim().equals(ARGS_PORT) && args[2].trim().equals(ARGS_AUTH_FILE)) {
+						port = Integer.parseInt(args[1]);
+						auth_file = args[3].trim();
+					} else if (args[2].trim().equals(ARGS_PORT) && args[0].trim().equals(ARGS_AUTH_FILE)) {
+						port = Integer.parseInt(args[3]);
+						auth_file = args[1].trim();
+					}
+				}
+
+				KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
+				FileUtils.savePublicKey(rsaKeyPair.getPublic(), auth_file);
+				//System.out.println("chave publica banco: " + rsaKeyPair.getPublic().toString());
+				serverSocket = new ServerSocket(port);
+				System.out.println("Bank server listening on port " + port);
 
 			// Continuously accept client connections
 			while (true) {
@@ -196,28 +209,28 @@ public class BankServer {
 					String[] ClientArgs = ClientArguments.split(" ");
 
 					/*
-					 * for (String word : ClientArgs){
-					 * System.out.println(word);
-					 * }
-					 */
+					for (String word : ClientArgs){
+						System.out.println(word);
+					}*/
+
 
 					// Validate Sequence Number for Replay attacks
 					if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))) {
 						SequenceNumber++;
 
 						// Arguments Processing
-						Accounts Account = new Accounts();
+						Account Account = new Account();
 						boolean createAccount = false, deposit = false, withdraw = false, get = false;
 						int CounterOperations = 0;
 
-						for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
-							switch (ClientArgs[i]) {
+						for (int i = 0;i<ClientArgs.length-1;i=i+2){
+							switch (ClientArgs[i]){
 								case "-c":
 									Account.setCardFile(ClientArgs[i + 1]);
 									break;
 								case "-a":
-									Account.setName(ClientArgs[i + 1]);
-									break;
+									Account.setName(ClientArgs[i+1]);
+								break;
 								case "-n":
 									createAccount = true;
 									Account.setBalance(Double.parseDouble(ClientArgs[i + 1]));
@@ -230,7 +243,7 @@ public class BankServer {
 									break;
 								case "-w":
 									withdraw = true;
-									Account.LessBalance(Double.parseDouble(ClientArgs[i + 1]));
+									Account.LessBalance(Double.parseDouble(ClientArgs[i+1]));
 									CounterOperations++;
 									break;
 								case "-g":
@@ -249,7 +262,7 @@ public class BankServer {
 				System.out.println("Error during handshake: " + e.getMessage());
 			} finally {
 				try {
-					socket.close();
+					cleanExit();
 				} catch (IOException e) {
 				}
 			}
@@ -311,7 +324,60 @@ public class BankServer {
 		}
 	}
 
-	private void cleanExit() {
+	/**
+	 * This function returns true if all of its arguments are valid or false if any aren't
+	 *
+	 * @param args args from atm start
+	 */
+	//REVER ISTO
+	private static boolean validateArgs(String[] args) throws IOException {
+
+		if (args.length > 4) {
+			printUsage(debug);
+			cleanExit();
+			return false;
+		}
+
+		for (int i = 0; i < args.length; i += 2) {
+			if (args[i].startsWith("-s")) {
+				String authFilePath = extractArg("-s", i, args);
+				 if (!fileValidation(authFilePath)) return false;
+			} else if (args[i].startsWith("-p")) {
+				String port = extractArg("-p", i, args);
+				if (!portValidation(port)) return false;
+			} else { // Invalid argument
+				printUsage(debug);
+				cleanExit();
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Validates a port if it is between 1024 and 65535
+	 *
+	 * @param input port to be verified
+	 * @return true if it is a valid port, false otherwise
+	 */
+	private static boolean portValidation(String input) throws IOException {
+		if (!canConvertStringToInt(input)) {
+			cleanExit();
+			return false;
+		}
+		int port = Integer.parseInt(input);
+		return port < 1024 || port > 65535;
+	}
+
+	private static boolean canConvertStringToInt(String str) {
+		try {
+			Integer.parseInt(str);
+		} catch (Exception e) {
+			return false;
+		}
+		return true;
+	}
+
+	private static void cleanExit() throws IOException {
 		printUsage(debug);
 		// nao eh necessario mas eh uma boa pratica
 		if (!serverSocket.isClosed()) {

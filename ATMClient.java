@@ -2,6 +2,8 @@ import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.io.File;
@@ -71,9 +73,10 @@ public class ATMClient {
 					System.out.println("Sent: " + arguments + ", to the server!");
 				} catch (Exception e) {
 
+					}
+				} else {
+					System.out.println("Mutual authentication failed!");
 				}
-			} else {
-				System.out.println("Mutual authentication failed!");
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -110,6 +113,112 @@ public class ATMClient {
 					secureSocket.getBankPublicKey()/* secureSocket.bankPublicKey */)) {
 				secureSocket.close();// secureSocket.socket.close(); // socket.close();
 				throw new SecurityException("Server's RSA signature verification failed!");
+		// Verify the server's signature using the server's RSA public key.
+		if (!RSAKeyUtils.verifySignature(serverEcdhPubKeyEncoded, serverSignature,
+				secureSocket.getBankPublicKey()/* secureSocket.bankPublicKey */)) {
+			secureSocket.close();// secureSocket.socket.close(); // socket.close();
+			throw new SecurityException("Server's RSA signature verification failed!");
+		}
+		System.out.println("Server's RSA signature verified.");
+
+		// Send the client's ECDH public key and RSA signature.
+		secureSocket.sendMessage(ecdhPubKeyEncoded); // oos.writeObject(ecdhPubKeyEncoded);
+		secureSocket.sendMessage(signature);// oos.writeObject(signature);
+		secureSocket.flush();// oos.flush();
+		System.out.println("Sent client's ECDH public key and RSA signature.");
+
+		// Reconstruct the server's ECDH public key.
+		KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
+		X509EncodedKeySpec keySpec = new X509EncodedKeySpec(serverEcdhPubKeyEncoded);
+		PublicKey serverEcdhPubKey = keyFactory.generatePublic(keySpec);
+
+		// Perform the ECDH key agreement.
+		KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
+		keyAgree.init(ecdhKeyPair.getPrivate());
+		keyAgree.doPhase(serverEcdhPubKey, true);
+		sharedSecret = keyAgree.generateSecret();
+		System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
+		//System.out.println(sharedSecret.length);
+
+		return true;
+	}
+
+	privalePath = extractArg("-s", i, args);
+				if (!fileValidation(authFilePath)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-i")) {
+				String ipAddress = ete static boolean validateArgs(String[] args) throws IOException {
+		if (args.length < 2 || args.length > 12) {
+			if (verbose) printUsage();
+			cleanExit();
+			return false;
+		}
+
+		// Set to track duplicate arguments
+		Set<String> usedArgs = new HashSet<>();
+
+		for (int i = 0; i < args.length; i += 2) {
+			// Check for duplicate argument
+			if (usedArgs.contains(args[i])) {
+				if (verbose) System.out.println("Error: Duplicate argument " + args[i]);
+				cleanExit();
+				return false;
+			}
+
+			if (args[i].startsWith("-s")) {
+				String authFixtractArg("-i", i, args);
+				if (!ipValidation(ipAddress)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-p")) {
+				String port = extractArg("-p", i, args);
+				if (!portValidation(port)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-c")) {
+				String cardFilePath = extractArg("-c", i, args);
+				if (!fileValidation(cardFilePath)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-a")) {
+				String account = extractArg("-a", i, args);
+				if (!accountValidation(account)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-n")) {
+				String balance = extractArg("-n", i, args);
+				if (!balanceValidation(balance)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-d")) {
+				String balance = extractArg("-d", i, args);
+				if (!balanceValidation(balance)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-w")) {
+				String balance = extractArg("-w", i, args);
+				if (!balanceValidation(balance)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else if (args[i].startsWith("-g")) {
+				if (!args[i].equals("-g")) {
+					if (verbose) printUsage();
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else { // Invalid argument
+				if (verbose) printUsage();
+				cleanExit();
+				return false;
 			}
 			System.out.println("Server's RSA signature verified.");
 
@@ -135,7 +244,7 @@ public class ATMClient {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		return false;
+		return true; // Validation successful
 	}
 
 	private boolean isValidArgs(String[] args) {
