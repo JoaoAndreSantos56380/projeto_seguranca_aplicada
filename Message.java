@@ -9,8 +9,8 @@ public class Message {
 	public Message(int sequenceNumber, int messageLength, long mac, String playload) {
 		this.sequenceNumber = sequenceNumber;
 		this.messageLength = messageLength;
-		this.mac = mac;//E(mensgem em calro + mac)
-		this.playload = playload;
+		this.mac = mac;//E(mensgem em claro + mac)
+		this.playload = playload; // (OPERATION, values)
 	}
 
 	// Getters

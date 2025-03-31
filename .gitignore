@@ -11,4 +11,5 @@ bank.auth
 /.idea/
 /projetoSeguranca.iml
 /out/
-bank.auth
+/bank.auth
+/card.file
