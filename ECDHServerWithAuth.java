@@ -1,4 +1,4 @@
-import java.io.ObjectInputStream;
+/* import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -20,6 +20,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 public class ECDHServerWithAuth {
 	// Pre-shared symmetric key for authentication (in a real system, keep this
 	// secret and secure)
+	// TODO trocar por chave publica do client
 	private static final byte[] PSK = "SuperSecretKey123".getBytes();
 
 	public static void main(String[] args) throws Exception {
@@ -91,3 +92,4 @@ public class ECDHServerWithAuth {
 		serverSocket.close();
 	}
 }
+ */

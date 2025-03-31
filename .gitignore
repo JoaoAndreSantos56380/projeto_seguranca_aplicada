@@ -1,3 +1,5 @@
+bank.auth
+.vscode/launch.json
 # Default ignored files
 /shelf/
 /workspace.xml
@@ -9,3 +11,4 @@
 /.idea/
 /projetoSeguranca.iml
 /out/
+bank.auth

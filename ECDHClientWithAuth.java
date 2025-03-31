@@ -1,4 +1,4 @@
-import java.io.ObjectInputStream;
+/* import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.security.KeyFactory;
@@ -19,6 +19,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 public class ECDHClientWithAuth {
 	// Pre-shared symmetric key for authentication (must be identical to the
 	// server's PSK)
+	//TODO trocar por chave publica do server
 	private static final byte[] PSK = "SuperSecretKey123".getBytes();
 
 	public static void main(String[] args) throws Exception {
@@ -87,3 +88,4 @@ public class ECDHClientWithAuth {
 		socket.close();
 	}
 }
+ */
