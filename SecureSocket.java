@@ -43,6 +43,7 @@ public class SecureSocket {
 
 	public void sendMessage(byte[] message) throws Exception {
 		this.out.writeObject(message);
+		this.out.flush();
 	}
 
 	// Reads, verifies HMAC, and decrypts a received message.
