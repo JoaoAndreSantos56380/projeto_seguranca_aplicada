@@ -45,6 +45,8 @@ public class ATMClient {
 
 		config = getConfigFromArgs(args);
 
+		addShutdownHook();
+
 		// init()
 		try {
 			Security.addProvider(new BouncyCastleProvider());
@@ -57,6 +59,11 @@ public class ATMClient {
 			// Load the shared secret key from the auth file.
 			PublicKey bankPublicKey = FileUtils.readPublicKey(AUTH_FILE);
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+
+			if (socket.isClosed() || !socket.isConnected()) {
+				System.out.println("ERROR: socket is not connected");
+				cleanExit();
+			}
 
 			secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
 			if (performHandshake(secureSocket)) {
@@ -399,25 +406,29 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 
 	private void run(String[] args) {
 
-		int balance;
+		//TROCAR PARA INT * 100
+		//int balance;
+		double balance = 0;
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-n")) {
-				balance = Integer.parseInt(extractArg("-n", i, args));
+				System.out.println(extractArg("-n", i, args));
+				balance = Double.parseDouble(extractArg("-n", i, args));
 				if (args[i].equals("-n")) {
 					i++;
 				}
 				// createAccount(balance);
 				return;
 			} else if (args[i].startsWith("-d")) {
-				balance = Integer.parseInt(extractArg("-d", i, args));
+				//balance = Integer.parseInt(extractArg("-d", i, args));
+				balance = Double.parseDouble(extractArg("-n", i, args));
 				if (args[i].equals("-d")) {
 					i++;
 				}
 				// deposit(balance);
 				return;
 			} else if (args[i].startsWith("-w")) {
-				balance = Integer.parseInt(extractArg("-w", i, args));
+				balance = Double.parseDouble(extractArg("-n", i, args));
 				if (args[i].equals("-w")) {
 					i++;
 				}
@@ -428,6 +439,9 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 				return;
 			}
 		}
+		//encerrar o cliente
+		//cleanExit();
+		//System.exit(0);
 	}
 
 	private void printUsage() {
@@ -448,9 +462,7 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 	// enviar msg ao server de q este cliente fechou?
 	private void cleanExit() {
 		// printUsage();
-		if (!secureSocket.isClosed()) {
-			// nao eh necessario mas eh uma boa pratica
-			// secureSocket.closeStreams();
+		if (secureSocket != null && secureSocket.isClosed()) {
 			secureSocket.close();
 		}
 		System.exit(EXIT_FAILURE);
@@ -475,4 +487,17 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 				authFile, serverIp, serverPort, cardFile, account);
 		}
 	}
+
+	private void addShutdownHook() {
+		ClientShutdown shutdownThread = new ClientShutdown();
+		Runtime.getRuntime().addShutdownHook(shutdownThread);
+	}
+
+	class ClientShutdown extends Thread {
+		public void run() {
+			cleanExit();
+		}
+	}
 }
+
+
