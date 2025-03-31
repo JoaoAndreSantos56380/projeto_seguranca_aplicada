@@ -24,6 +24,7 @@ public class ATMClient {
 	private static final String AUTH_FILE = "bank.auth"; // Shared auth file
 	private static SecureSocket secureSocket = null;
 	private static byte[] sharedSecret;
+	private static final boolean verbose = false;
 
 	public static void main(String[] args) {
 		try {
@@ -46,6 +47,7 @@ public class ATMClient {
 					arguments = arguments + " " + SequenceNumber;
 					byte[] MessageArgs = ECDHKey.encrypt(arguments);
 					secureSocket.sendMessage(MessageArgs);
+					System.out.println("Sent: " + arguments + ", to the server!");
 				}
 				catch(Exception e){
 
@@ -53,11 +55,10 @@ public class ATMClient {
 			} else {
 				System.out.println("Mutual authentication failed!");
 			}
-
-			socket.close();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+		cleanExit();
 	}
 
 	// Implements the handshake protocol.
@@ -111,72 +112,66 @@ public class ATMClient {
 		return true;
 	}
 
-	private static void validateArgs(String[] args) throws IOException {
+	private static boolean validateArgs(String[] args) throws IOException {
 		if (args.length < 2 || args.length > 12) {
-			printUsage(debug);
-			// TODO fazer saida suave: cleanExit()
-			System.exit(EXIT_FAILURE);
+			if (verbose) printUsage();
+
+			cleanExit();
+			return false;
 		}
 
 		for (int i = 0; i < args.length; i+=2) {
 			if (args[i].startsWith("-s")) {
 				String authFilePath = extractArg("-s", i, args);
-				fileValidation(authFilePath);
+				if (!fileValidation(authFilePath)) cleanExit(); return false;
 			} else if (args[i].startsWith("-i")) {
-				String ipAdress = extractArg("-i", i, args);
-				ipValidation(ipAdress);
+				String ipAddress = extractArg("-i", i, args);
+				if (!ipValidation(ipAddress)) cleanExit(); return false;
 			} else if (args[i].startsWith("-p")) {
 				String port = extractArg("-p", i, args);
-				portValidation(port);
-
+				if (!portValidation(port)) cleanExit(); return false;
 			} else if (args[i].startsWith("-c")) {
 				String cardFilePath = extractArg("-c", i, args);
-				fileValidation(cardFilePath);
+				if (!fileValidation(cardFilePath)) cleanExit(); return false;
 			} else if (args[i].startsWith("-a")) {
 				String account = extractArg("-a", i, args);
-				accountValidation(account);
+				if (!accountValidation(account)) cleanExit(); return false;
 			} else if (args[i].startsWith("-n")) {
 				String balance = extractArg("-n", i, args);
-				balanceValidation(balance);
+				if (!balanceValidation(balance)) cleanExit(); return false;
 			} else if (args[i].startsWith("-d")) {
 				String balance = extractArg("-d", i, args);
-				balanceValidation(balance);
+				if (!balanceValidation(balance)) cleanExit(); return false;
 			} else if (args[i].startsWith("-w")) {
 				String balance = extractArg("-w", i, args);
-				balanceValidation(balance);
+				if (!balanceValidation(balance)) cleanExit(); return false;
 			} else if (args[i].startsWith("-g")) {
 				if (!args[i].equals("-g")) {
-					printUsage(debug);
-					// TODO fazer saida suave: cleanExit()
-					System.exit(EXIT_FAILURE);
+					if (verbose) printUsage(); cleanExit();
 				}
 			} else { // Invalid argument
-				printUsage(debug);
-				// TODO fazer saida suave: cleanExit()
-				System.exit(EXIT_FAILURE);
+				if (verbose) printUsage(); cleanExit();
 			}
 		}
+		return false;
 	}
 
 	private static String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
-			printUsage(debug);
-			// TODO fazer saida suave: cleanExit()
-			System.exit(EXIT_FAILURE);
+			//printUsage();
+			cleanExit();
 		}
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
 
-	private static void balanceValidation(String input) throws IOException {
+	private static boolean balanceValidation(String input) {
 		if(!canConvertStringToDouble(input)){
-			cleanExit();
+			return false;
 		}
 
 		double balance = Double.parseDouble(input);
 
-		if (balance < 0.00 || balance > 4294967295.99) {
-			cleanExit();
-		}
+		return !(balance < 0.00 || balance > 4294967295.99);
 	}
 
 	private static boolean canConvertStringToDouble(String input){
@@ -195,34 +190,22 @@ public class ATMClient {
 	 * @param filename file name to be verified
 	 * @return true if it is a valid filename, false otherwise
 	 */
-	private static boolean fileValidation(String filename) throws IOException {
-		if (filename == null) {
+	private static boolean fileValidation(String filename) {
+		if (filename == null || filename.isEmpty() || filename.length() > 127) {
 			cleanExit();
-		}
-		if (filename.isEmpty()) {
-			cleanExit();
-		}
-		if (filename.length() > 127) {
-			cleanExit();
-		}
+		} else {
+			String filenameRegex = "^[\\-_\\.0-9a-z]+$";
+			Pattern pattern = Pattern.compile(filenameRegex);
+			Matcher matcher = pattern.matcher(filename);
 
-		// String dotRegex = "^\\.$|^\\.\\.$";
-		// Pattern dotPattern = Pattern.compile(dotRegex);
-
-		String filenameRegex = "^[\\-_\\.0-9a-z]+$";
-		Pattern pattern = Pattern.compile(filenameRegex);
-		Matcher matcher = pattern.matcher(filename);
-
-		File file = new File(filename);
-		if (!file.exists()) {
-			System.out.print(debug ? String.format("%s: not such file\n", filename): "");
-			cleanExit();
-			/* printUsage(debug);
-			// TODO fazer saida suave: cleanExit()
-			System.exit(EXIT_FAILURE); */
+			File file = new File(filename);
+			if (!file.exists()) {
+				System.out.print(debug ? String.format("%s: no such file\n", filename) : "");
+				cleanExit();
+			}
+			return matcher.matches();
 		}
-
-		return matcher.matches();
+		return false;
 	}
 
 	/**
@@ -231,18 +214,16 @@ public class ATMClient {
 	 * @return true if it is a valid account name, false otherwise
 	 */
 	// TODO rever regex para aceitar "." e ".."
-	private static void accountValidation(String account) throws IOException {
+	private static boolean accountValidation(String account) throws IOException {
 		if(account == null || account.isEmpty() || account.length() > 122){
-			cleanExit();
+			return false;
 		}
 		String regex = "^[\\-_\\.0-9a-z]+$";
 
 		Pattern pattern = Pattern.compile(regex);
 		Matcher matcher = pattern.matcher(account);
 
-		if(!matcher.matches()){
-			cleanExit();
-		}
+		return matcher.matches();
 	}
 
 	/**
@@ -250,9 +231,10 @@ public class ATMClient {
 	 * @param input ip to be verified
 	 * @return true if it is a valid ip, false otherwise
 	 */
-	private static void ipValidation(String input) {
+	private static boolean ipValidation(String input) {
 		if(input == null || input.isEmpty() || input.length() > 16){
 			cleanExit();
+			return false;
 		}
 
 		String regex = "(\\b25[0-5]|\\b2[0-4][0-9]|\\b[01]?[0-9][0-9]?)(\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}";
@@ -260,9 +242,7 @@ public class ATMClient {
 		Pattern pattern = Pattern.compile(regex);
 		Matcher matcher = pattern.matcher(input);
 
-		if(!matcher.matches()){
-			cleanExit();
-		}
+		return matcher.matches();
 	}
 
 	/**
@@ -271,15 +251,13 @@ public class ATMClient {
 	 * @param input port to be verified
 	 * @return true if it is a valid port, false otherwise
 	 */
-	private static void portValidation(String input) {
-		if(!canConvertStringToInt(input)) {
+	private static boolean portValidation(String input) {
+		if (!canConvertStringToInt(input)) {
 			cleanExit();
+			return false;
 		}
-
 		int port = Integer.parseInt(input);
-		if (port < 1024 || port > 65535) {
-			cleanExit();
-		}
+		return port < 1024 || port > 65535;
 	}
 
 	private static boolean canConvertStringToInt(String str) {
@@ -291,7 +269,7 @@ public class ATMClient {
 		return true;
 	}
 
-	private static void printUsage(boolean verbose) {
+	private static void printUsage() {
 		System.out.println("Usage: ATMClient [-s <auth-file>] [-i <ip-address>] [-p <port>]");
 		System.out.println("                 [-c <card-file>] -a <account> -n <balance>");
 		System.out.println("Options:");
@@ -306,11 +284,12 @@ public class ATMClient {
 		System.out.println("  -g				 : Get balance amount (format: XX.XX)");
 	}
 
+	// enviar msg ao server de q este cliente fechou?
 	private static void cleanExit() {
-			printUsage(debug);
+			//printUsage();
 			if (secureSocket.isClosed()) {
 				//nao eh necessario mas eh uma boa pratica
-				secureSocket.closeStreams();
+				//secureSocket.closeStreams();
 				secureSocket.close();
 			}
 			System.exit(EXIT_FAILURE);
