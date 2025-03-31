@@ -54,10 +54,23 @@ public class SecureSocket {
 		try {
 			this.socket.close();
 		} catch (IOException e) {
-			// e.printStackTrace();
-			System.out.println("senhora socket nao quis fechar");
+			e.printStackTrace();
 		}
 	}
+
+	public boolean isClosed() {
+        return this.socket.isClosed();
+    }
+
+	public void closeStreams() {
+		try {
+			this.in.close();
+			this.out.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
 
 	public void flush() {
 		try {

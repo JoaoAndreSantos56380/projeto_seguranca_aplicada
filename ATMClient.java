@@ -1,3 +1,4 @@
+import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Arrays;
@@ -21,6 +22,8 @@ public class ATMClient {
 	private static final String SERVER_IP = "127.0.0.1";
 	private static final int SERVER_PORT = 3000;
 	private static final String AUTH_FILE = "bank.auth"; // Shared auth file
+	private static SecureSocket secureSocket = null;
+	private static byte[] sharedSecret;
 
 	public static void main(String[] args) {
 		try {
@@ -31,10 +34,22 @@ public class ATMClient {
 			PublicKey bankPublicKey = FileUtils.readPublicKey(AUTH_FILE);
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
 
-			SecureSocket secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
+			secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
 			if (performHandshake(secureSocket)) {
 				System.out.println("Mutual authentication successful!");
 				// Further processing after authentication can follow here.
+				ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+				try{
+					byte[] EncryptedMsg = secureSocket.receiveMessage();
+					String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
+					String arguments = String.join(" ", args);
+					arguments = arguments + " " + SequenceNumber;
+					byte[] MessageArgs = ECDHKey.encrypt(arguments);
+					secureSocket.sendMessage(MessageArgs);
+				}
+				catch(Exception e){
+
+				}				
 			} else {
 				System.out.println("Mutual authentication failed!");
 			}
@@ -90,13 +105,13 @@ public class ATMClient {
 		KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
 		keyAgree.init(ecdhKeyPair.getPrivate());
 		keyAgree.doPhase(serverEcdhPubKey, true);
-		byte[] sharedSecret = keyAgree.generateSecret();
+		sharedSecret = keyAgree.generateSecret();
 		System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
 
 		return true;
 	}
 
-	private static void validateArgs(String[] args) {
+	private static void validateArgs(String[] args) throws IOException {
 		if (args.length < 2 || args.length > 12) {
 			printUsage(debug);
 			// TODO fazer saida suave: cleanExit()
@@ -152,7 +167,7 @@ public class ATMClient {
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
 
-	private static void balanceValidation(String input) {
+	private static void balanceValidation(String input) throws IOException {
 		if(!canConvertStringToDouble(input)){
 			cleanExit();
 		}
@@ -180,7 +195,7 @@ public class ATMClient {
 	 * @param filename file name to be verified
 	 * @return true if it is a valid filename, false otherwise
 	 */
-	private static boolean fileValidation(String filename) {
+	private static boolean fileValidation(String filename) throws IOException {
 		if (filename == null) {
 			cleanExit();
 		}
@@ -212,11 +227,11 @@ public class ATMClient {
 
 	/**
 	 *
-	 * @param input account name to be verified
+	 * @param account account name to be verified
 	 * @return true if it is a valid account name, false otherwise
 	 */
 	// TODO rever regex para aceitar "." e ".."
-	private static void accountValidation(String account) {
+	private static void accountValidation(String account) throws IOException {
 		if(account == null || account.isEmpty() || account.length() > 122){
 			cleanExit();
 		}
@@ -291,9 +306,13 @@ public class ATMClient {
 		System.out.println("  -g				 : Get balance amount (format: XX.XX)");
 	}
 
-	private static void cleanExit(){
-		printUsage(debug);
-		// TODO fazer saida suave: cleanExit()
-		System.exit(EXIT_FAILURE);
+	private static void cleanExit() {
+			printUsage(debug);
+			if (secureSocket.isClosed()) {
+				//nao eh necessario mas eh uma boa pratica
+				secureSocket.closeStreams();
+				secureSocket.close();
+			}
+			System.exit(EXIT_FAILURE);
 	}
 }
