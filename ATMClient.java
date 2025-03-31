@@ -2,6 +2,8 @@ import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.io.File;
@@ -28,32 +30,33 @@ public class ATMClient {
 
 	public static void main(String[] args) {
 		try {
-			validateArgs(args);
-			Security.addProvider(new BouncyCastleProvider());
-			KeyPair atmKeyPair = RSAKeyUtils.generateRSAKeyPair();
-			// Load the shared secret key from the auth file.
-			PublicKey bankPublicKey = FileUtils.readPublicKey(AUTH_FILE);
-			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+			if (validateArgs(args)) {
+				Security.addProvider(new BouncyCastleProvider());
+				KeyPair atmKeyPair = RSAKeyUtils.generateRSAKeyPair();
+				// Load the shared secret key from the auth file.
+				PublicKey bankPublicKey = FileUtils.readPublicKey(AUTH_FILE);
+				Socket socket = new Socket(SERVER_IP, SERVER_PORT);
 
-			secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
-			if (performHandshake(secureSocket)) {
-				System.out.println("Mutual authentication successful!");
-				// Further processing after authentication can follow here.
-				ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
-				try{
-					byte[] EncryptedMsg = secureSocket.receiveMessage();
-					String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
-					String arguments = String.join(" ", args);
-					arguments = arguments + " " + SequenceNumber;
-					byte[] MessageArgs = ECDHKey.encrypt(arguments);
-					secureSocket.sendMessage(MessageArgs);
-					System.out.println("Sent: " + arguments + ", to the server!");
-				}
-				catch(Exception e){
+				secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
+				if (performHandshake(secureSocket)) {
+					System.out.println("Mutual authentication successful!");
+					// Further processing after authentication can follow here.
+					ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+					try{
+						byte[] EncryptedMsg = secureSocket.receiveMessage();
+						String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
+						String arguments = String.join(" ", args);
+						arguments = arguments + " " + SequenceNumber;
+						byte[] MessageArgs = ECDHKey.encrypt(arguments);
+						secureSocket.sendMessage(MessageArgs);
+						System.out.println("Sent: " + arguments + ", to the server!");
+					}
+					catch(Exception e){
 
+					}
+				} else {
+					System.out.println("Mutual authentication failed!");
 				}
-			} else {
-				System.out.println("Mutual authentication failed!");
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -116,46 +119,84 @@ public class ATMClient {
 	private static boolean validateArgs(String[] args) throws IOException {
 		if (args.length < 2 || args.length > 12) {
 			if (verbose) printUsage();
-
 			cleanExit();
 			return false;
 		}
 
-		for (int i = 0; i < args.length; i+=2) {
+		// Set to track duplicate arguments
+		Set<String> usedArgs = new HashSet<>();
+
+		for (int i = 0; i < args.length; i += 2) {
+			// Check for duplicate argument
+			if (usedArgs.contains(args[i])) {
+				if (verbose) System.out.println("Error: Duplicate argument " + args[i]);
+				cleanExit();
+				return false;
+			}
+
 			if (args[i].startsWith("-s")) {
 				String authFilePath = extractArg("-s", i, args);
-				if (!fileValidation(authFilePath)) cleanExit(); return false;
+				if (!fileValidation(authFilePath)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-i")) {
 				String ipAddress = extractArg("-i", i, args);
-				if (!ipValidation(ipAddress)) cleanExit(); return false;
+				if (!ipValidation(ipAddress)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-p")) {
 				String port = extractArg("-p", i, args);
-				if (!portValidation(port)) cleanExit(); return false;
+				if (!portValidation(port)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-c")) {
 				String cardFilePath = extractArg("-c", i, args);
-				if (!fileValidation(cardFilePath)) cleanExit(); return false;
+				if (!fileValidation(cardFilePath)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-a")) {
 				String account = extractArg("-a", i, args);
-				if (!accountValidation(account)) cleanExit(); return false;
+				if (!accountValidation(account)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-n")) {
 				String balance = extractArg("-n", i, args);
-				if (!balanceValidation(balance)) cleanExit(); return false;
+				if (!balanceValidation(balance)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-d")) {
 				String balance = extractArg("-d", i, args);
-				if (!balanceValidation(balance)) cleanExit(); return false;
+				if (!balanceValidation(balance)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-w")) {
 				String balance = extractArg("-w", i, args);
-				if (!balanceValidation(balance)) cleanExit(); return false;
+				if (!balanceValidation(balance)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-g")) {
 				if (!args[i].equals("-g")) {
-					if (verbose) printUsage(); cleanExit();
-				}
+					if (verbose) printUsage();
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else { // Invalid argument
-				if (verbose) printUsage(); cleanExit();
+				if (verbose) printUsage();
+				cleanExit();
+				return false;
 			}
 		}
-		return false;
+		return true; // Validation successful
 	}
+
 
 	private static String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
