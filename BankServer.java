@@ -1,5 +1,7 @@
 import java.io.*;
 import java.security.*;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -10,7 +12,6 @@ import java.util.Arrays;
 
 import javax.crypto.KeyAgreement;
 
-import java.util.Random;
 //TODO verificar se ficheiro fornecido pelo input do user ja existe. se sim sair
 
 import org.bouncycastle.jce.ECNamedCurveTable;
@@ -28,7 +29,7 @@ public class BankServer {
 	private static final SecureRandom random = new SecureRandom();
 	private static int SequenceNumber = genSeq();
 
-	private static Accounts[] accounts;
+	private static Account[] accounts;
 
 	public static void main(String[] args) throws IOException {
 		if (!validateArgs(args)) {
@@ -43,8 +44,7 @@ public class BankServer {
 			try {
 				//tratar argumentos da consola
 				if (args.length > 4) {
-					System.out.println("255");
-					return;
+					cleanExit();
 				} else if (args.length != 0) {
 					if (args[0].trim().equals(ARGS_PORT) && args[2].trim().equals(ARGS_AUTH_FILE)) {
 						port = Integer.parseInt(args[1]);
@@ -112,10 +112,10 @@ public class BankServer {
 					String ClientArguments = ECDHKey.decrypt(EncryptedMessageReceive);
 					String[] ClientArgs = ClientArguments.split(" ");
 
-					/*
+
 					for (String word : ClientArgs){
 						System.out.println(word);
-					}*/
+					}
 
 					
 					// Validate Sequence Number for Replay attacks
@@ -123,18 +123,22 @@ public class BankServer {
 						SequenceNumber++;
 
 						// Arguments Processing
-						Accounts Account = new Accounts();
+						Account Account = new Account();
 						boolean createAccount = false, deposit = false, withdraw = false, get = false;
 						int CounterOperations=0;
 
-						for (int i = 0;i<ClientArgs.length-1;i=i+2){
+						//nao deveriamos ter protecao contra duplicacao de comandos?
+						for (int i = 0; i < ClientArgs.length-1; i=i+2){
 							switch (ClientArgs[i]){
+								//Optional parameters
 								case "-c":
 									Account.setCardFile(ClientArgs[i+1]);
 								break;
 								case "-a":
 									Account.setName(ClientArgs[i+1]);
 								break;
+
+								//Modes of Operation
 								case "-n":
 									createAccount = true;
 									Account.setBalance(Double.parseDouble(ClientArgs[i+1]));
@@ -147,7 +151,7 @@ public class BankServer {
 								break;
 								case "-w":
 									withdraw = true;
-									Account.LessBalance(Double.parseDouble(ClientArgs[i+1]));
+									Account.subBalance(Double.parseDouble(ClientArgs[i+1]));
 									CounterOperations++;
 								break;
 								case "-g":
@@ -166,7 +170,7 @@ public class BankServer {
 				System.out.println("Error during handshake: " + e.getMessage());
 			} finally {
 				try {
-					socket.close();
+					cleanExit();
 				} catch (IOException e) {
 				}
 			}
@@ -240,18 +244,35 @@ public class BankServer {
 			return false;
 		}
 
+		// Set to track duplicate arguments
+		Set<String> usedArgs = new HashSet<>();
+
 		for (int i = 0; i < args.length; i += 2) {
+
+			if (usedArgs.contains(args[i])) {
+				System.out.println("Error: Duplicate argument " + args[i]);
+				cleanExit();
+				return false;
+			}
+
 			if (args[i].startsWith("-s")) {
 				String authFilePath = extractArg("-s", i, args);
-				 if (!fileValidation(authFilePath)) return false;
+				if (!fileValidation(authFilePath)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
 			} else if (args[i].startsWith("-p")) {
 				String port = extractArg("-p", i, args);
-				if (!portValidation(port)) return false;
-			} else { // Invalid argument
-				printUsage(debug);
-				cleanExit();
+				if (!portValidation(port)) {
+					cleanExit();
+					return false;
+				} else usedArgs.add(args[i]);
+			} else{ // Invalid argument
+					printUsage(debug);
+					cleanExit();
+				}
 			}
-		}
+
 		return true;
 	}
 
