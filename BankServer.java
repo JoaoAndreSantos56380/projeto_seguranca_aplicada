@@ -1,4 +1,5 @@
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.security.*;
 import java.util.HashSet;
 import java.util.Set;
@@ -33,7 +34,7 @@ public class BankServer {
 	private ServerSocket serverSocket;
 	private final SecureRandom random = new SecureRandom();
 	private int SequenceNumber = genSeq();
-	private Account[] accounts;
+	private HashSet<Account> accounts;
 
 	public static void main(String[] args) throws IOException {
 		new BankServer(args);
@@ -46,6 +47,8 @@ public class BankServer {
 		}
 
 		config = getConfigFromArgs(args);
+		//criar set de contas
+		accounts = new HashSet<>();
 
 		Security.addProvider(new BouncyCastleProvider());
 		try {
@@ -53,10 +56,17 @@ public class BankServer {
 			FileUtils.savePublicKey(rsaKeyPair.getPublic(), config.authFile);
 			// System.out.println("chave publica banco: " +
 			// rsaKeyPair.getPublic().toString());
+			//eh siupsoto aceitarmos apenas de um porto??
 			serverSocket = new ServerSocket(config.port);
+
+			//serverSocket.setReuseAddress(true);
+			//serverSocket.bind(new InetSocketAddress(config.port));
+
 			System.out.println("Bank server listening on port " + config.port);
 			// Continuously accept client connections
-			while (true) {
+			//Socket clientSocket = serverSocket.accept();
+
+			while (!serverSocket.isClosed()) {
 				Socket clientSocket = serverSocket.accept();
 				System.out.println("Accepted connection from " + clientSocket.getInetAddress());
 				new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
@@ -142,6 +152,7 @@ public class BankServer {
 
 		config = new ServerConfig(DEFAULT_AUTH_FILE, DEFAULT_PORT);
 
+		addShutdownHook();
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-s")) {
@@ -211,20 +222,37 @@ public class BankServer {
 
 						// Arguments Processing
 						Account Account = new Account();
+						Account currentAccount = null;
+
+						//MELHORAR ESTE CHECK
+						if (!accounts.contains(Account)) {
+							accounts.add(Account);
+						}
+
 
 						for (int i = 0; i < ClientArgs.length - 1; i = i + 2){
+
 							switch (ClientArgs[i]){
 								//Optional parameters
 								case "-c":
 									Account.setCardFile(ClientArgs[i+1]);
 								break;
 								case "-a":
+									/*
+									for (Account acc : accounts) {
+										if (acc.getName().equals(ClientArgs[i + 1])) {
+											currentAccount = acc;
+											break;
+										}
+									}*/
+
 									Account.setName(ClientArgs[i+1]);
 								break;
 
 								//Modes of Operation
 								case "-n":
 									Account.setBalance(Double.parseDouble(ClientArgs[i+1]));
+									Account.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i+1]));
 								break;
 								case "-d":
 									Account.addBalance(Double.parseDouble(ClientArgs[i+1]));
@@ -233,12 +261,16 @@ public class BankServer {
 									Account.subBalance(Double.parseDouble(ClientArgs[i+1]));
 								break;
 								case "-g":
+									//TIRAR
+									Account.setBalance(4314.4);
 									Account.getBalance();
+									Account.toJson(ClientArgs[i], null);
 								break;
 							}
+							//print the operation
+							//Account.toJson(ClientArgs[i]);
 						}
-						//print the operation
-						Account.toJson();
+
 					}
 				} else {
 					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
@@ -246,7 +278,13 @@ public class BankServer {
 			} catch (Exception e) {
 				System.out.println("Error during handshake: " + e.getMessage());
 			} finally {
-                cleanExit();
+				//fechar socket cliente
+				try {
+					socket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+                //cleanExit();
             }
 		}
 
@@ -323,6 +361,11 @@ public class BankServer {
 				if (file.exists()) {
 					file.delete();
 				}
+				//TIRARARRR
+				File file2 = new File("card.file");
+				if (file2.exists()) {
+					file2.delete();
+				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -349,6 +392,17 @@ public class BankServer {
 		ServerConfig(String authFile, int port) {
 			this.authFile = authFile;
 			this.port = port;
+		}
+	}
+
+	private void addShutdownHook() {
+		ServerShutdown shutdownThread = new ServerShutdown();
+		Runtime.getRuntime().addShutdownHook(shutdownThread);
+	}
+
+	class ServerShutdown extends Thread {
+		public void run() {
+			cleanExit();
 		}
 	}
 }
