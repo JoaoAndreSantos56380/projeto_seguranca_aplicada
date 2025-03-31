@@ -49,7 +49,7 @@ public class ATMClient {
 				}
 				catch(Exception e){
 
-				}				
+				}
 			} else {
 				System.out.println("Mutual authentication failed!");
 			}
@@ -107,6 +107,7 @@ public class ATMClient {
 		keyAgree.doPhase(serverEcdhPubKey, true);
 		sharedSecret = keyAgree.generateSecret();
 		System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
+		//System.out.println(sharedSecret.length);
 
 		return true;
 	}
