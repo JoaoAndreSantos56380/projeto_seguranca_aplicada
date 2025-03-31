@@ -1,20 +1,10 @@
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.KeyPair;
-import java.security.PublicKey;
-import java.util.Base64;
+import java.security.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.crypto.*;
-import javax.crypto.spec.*;
-
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.security.KeyFactory;
-import java.security.KeyPairGenerator;
-import java.security.Security;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 
@@ -35,48 +25,60 @@ public class BankServer {
 	private static final String ARGS_PORT = "-p";
 	private static final String ARGS_AUTH_FILE = "-s";
 	private static ServerSocket serverSocket;
-	private static final Random random = new Random();
-	private static int SequenceNumber = random.nextInt(100000 - 100 + 1) + 100;
+	private static final SecureRandom random = new SecureRandom();
+	private static int SequenceNumber = genSeq();
+
 	private static Accounts[] accounts;
 
 	public static void main(String[] args) throws IOException {
-		validateArgs(args);
-		Security.addProvider(new BouncyCastleProvider());
-		int port = PORT;
-		String auth_file = AUTH_FILE;
-		try {
-			//tratar argumentos da consola
-			if(args.length > 4){
-				System.out.println("255");
-				return;
-			}
-			if (args.length != 0){
-				if(args[0].trim().equals(ARGS_PORT) && args[2].trim().equals(ARGS_AUTH_FILE)){
-					port = Integer.parseInt(args[1]);
-					auth_file = args[3].trim();
-				} else if(args[2].trim().equals(ARGS_PORT) && args[0].trim().equals(ARGS_AUTH_FILE)){
-					port = Integer.parseInt(args[3]);
-					auth_file = args[1].trim();
+		if (!validateArgs(args)) {
+			System.out.println("255");
+			cleanExit();
+			return;
+		} else {
+
+			Security.addProvider(new BouncyCastleProvider());
+			int port = PORT;
+			String auth_file = AUTH_FILE;
+			try {
+				//tratar argumentos da consola
+				if (args.length > 4) {
+					System.out.println("255");
+					return;
+				} else if (args.length != 0) {
+					if (args[0].trim().equals(ARGS_PORT) && args[2].trim().equals(ARGS_AUTH_FILE)) {
+						port = Integer.parseInt(args[1]);
+						auth_file = args[3].trim();
+					} else if (args[2].trim().equals(ARGS_PORT) && args[0].trim().equals(ARGS_AUTH_FILE)) {
+						port = Integer.parseInt(args[3]);
+						auth_file = args[1].trim();
+					}
 				}
-			} else{
 
+				KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
+				FileUtils.savePublicKey(rsaKeyPair.getPublic(), auth_file);
+				//System.out.println("chave publica banco: " + rsaKeyPair.getPublic().toString());
+				serverSocket = new ServerSocket(port);
+				System.out.println("Bank server listening on port " + port);
+
+				// Continuously accept client connections
+				while (true) {
+					Socket clientSocket = serverSocket.accept();
+					System.out.println("Accepted connection from " + clientSocket.getInetAddress());
+					new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
+				}
+
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-
-			KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
-			FileUtils.savePublicKey(rsaKeyPair.getPublic(), auth_file);
-			//System.out.println("chave publica banco: " + rsaKeyPair.getPublic().toString());
-			serverSocket = new ServerSocket(port);
-			System.out.println("Bank server listening on port " + port);
-
-			// Continuously accept client connections
-			while (true) {
-				Socket clientSocket = serverSocket.accept();
-				System.out.println("Accepted connection from " + clientSocket.getInetAddress());
-				new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
 		}
+	}
+
+	public static int genSeq() {
+		SecureRandom random = new SecureRandom();
+		//byte[] nonce = new byte[8];
+		//random.nextBytes(nonce);
+		return random.nextInt(100000, 999999);
 	}
 
 	// Handles a client connection and performs the handshake.
@@ -110,18 +112,19 @@ public class BankServer {
 					String ClientArguments = ECDHKey.decrypt(EncryptedMessageReceive);
 					String[] ClientArgs = ClientArguments.split(" ");
 
+					/*
 					for (String word : ClientArgs){
 						System.out.println(word);
-					}
+					}*/
 
 					
 					// Validate Sequence Number for Replay attacks
-					if (ClientArgs[ClientArgs.length-1].equals(String.valueOf(SequenceNumber))){
-						SequenceNumber++;	
+					if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))){
+						SequenceNumber++;
 
 						// Arguments Processing
 						Accounts Account = new Accounts();
-						Boolean createAccount = false, deposit = false, withdraw = false, get = false;
+						boolean createAccount = false, deposit = false, withdraw = false, get = false;
 						int CounterOperations=0;
 
 						for (int i = 0;i<ClientArgs.length-1;i=i+2){
@@ -223,27 +226,33 @@ public class BankServer {
 		}
 	}
 
-	private static void validateArgs(String[] args) throws IOException {
+	/**
+	 * This function returns true if all of its arguments are valid or false if any aren't
+	 *
+	 * @param args args from atm start
+	 */
+	//REVER ISTO
+	private static boolean validateArgs(String[] args) throws IOException {
+
 		if (args.length > 4) {
 			printUsage(debug);
-			// TODO fazer saida suave: cleanExit()
-			System.exit(EXIT_FAILURE);
+			cleanExit();
+			return false;
 		}
 
 		for (int i = 0; i < args.length; i += 2) {
 			if (args[i].startsWith("-s")) {
 				String authFilePath = extractArg("-s", i, args);
-				fileValidation(authFilePath);
+				 if (!fileValidation(authFilePath)) return false;
 			} else if (args[i].startsWith("-p")) {
 				String port = extractArg("-p", i, args);
-				portValidation(port);
-
+				if (!portValidation(port)) return false;
 			} else { // Invalid argument
 				printUsage(debug);
-				// TODO fazer saida suave: cleanExit()
-				System.exit(EXIT_FAILURE);
+				cleanExit();
 			}
 		}
+		return true;
 	}
 
 	/**
@@ -252,15 +261,13 @@ public class BankServer {
 	 * @param input port to be verified
 	 * @return true if it is a valid port, false otherwise
 	 */
-	private static void portValidation(String input) throws IOException {
+	private static boolean portValidation(String input) throws IOException {
 		if (!canConvertStringToInt(input)) {
 			cleanExit();
+			return false;
 		}
-
 		int port = Integer.parseInt(input);
-		if (port < 1024 || port > 65535) {
-			cleanExit();
-		}
+		return port < 1024 || port > 65535;
 	}
 
 	private static boolean canConvertStringToInt(String str) {
@@ -282,42 +289,27 @@ public class BankServer {
 	}
 
 	private static boolean fileValidation(String filename) throws IOException {
-		if (filename == null) {
+		if (filename == null || filename.isEmpty() || filename.length() > 127) {
 			cleanExit();
-		}
-		if (filename.isEmpty()) {
-			cleanExit();
-		}
-		if (filename.length() > 127) {
-			cleanExit();
-		}
+		} else {
+			String filenameRegex = "^[\\-_\\.0-9a-z]+$";
+			Pattern pattern = Pattern.compile(filenameRegex);
+			Matcher matcher = pattern.matcher(filename);
 
-		// String dotRegex = "^\\.$|^\\.\\.$";
-		// Pattern dotPattern = Pattern.compile(dotRegex);
-
-		String filenameRegex = "^[\\-_\\.0-9a-z]+$";
-		Pattern pattern = Pattern.compile(filenameRegex);
-		Matcher matcher = pattern.matcher(filename);
-
-		File file = new File(filename);
-		if (!file.exists()) {
-			System.out.print(debug ? String.format("%s: not such file\n", filename) : "");
-			cleanExit();
-			/*
-			 * printUsage(debug);
-			 * // TODO fazer saida suave: cleanExit()
-			 * System.exit(EXIT_FAILURE);
-			 */
+			File file = new File(filename);
+			if (!file.exists()) {
+				System.out.print(debug ? String.format("%s: no such file\n", filename) : "");
+				cleanExit();
+			}
+			return matcher.matches();
 		}
-
-		return matcher.matches();
+		return false;
 	}
 
-	private static String extractArg(String option, int i, String[] args) {
+	private static String extractArg(String option, int i, String[] args) throws IOException {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
 			printUsage(debug);
-			// TODO fazer saida suave: cleanExit()
-			System.exit(EXIT_FAILURE);
+			cleanExit();
 		}
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
