@@ -9,8 +9,6 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 
 import javax.crypto.KeyAgreement;
-
-import java.util.Random;
 //TODO verificar se ficheiro fornecido pelo input do user ja existe. se sim sair
 
 import org.bouncycastle.jce.ECNamedCurveTable;
@@ -18,71 +16,156 @@ import org.bouncycastle.jce.spec.ECParameterSpec;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class BankServer {
+	// Constants
 	private static final boolean debug = false;
-	private static final int PORT = 3000;
-	private static final int EXIT_FAILURE = 255;
-	private static final String AUTH_FILE = "bank.auth";
-	private static final String ARGS_PORT = "-p";
 	private static final String ARGS_AUTH_FILE = "-s";
-	private static ServerSocket serverSocket;
-	private static final SecureRandom random = new SecureRandom();
-	private static int SequenceNumber = genSeq();
+	private static final String DEFAULT_AUTH_FILE = "bank.auth";
+	private static final String ARGS_PORT = "-p";
+	private static final int DEFAULT_PORT = 3000;
+	private static final int EXIT_FAILURE = 255;
 
-	private static Accounts[] accounts;
+	// Attributes
+	private ServerConfig config;
+	private ServerSocket serverSocket;
+	private final SecureRandom random = new SecureRandom();
+	private int SequenceNumber = genSeq();
+	private Accounts[] accounts;
 
 	public static void main(String[] args) throws IOException {
-		if (!validateArgs(args)) {
+		new BankServer(args);
+	}
+
+	public BankServer(String[] args) {
+		if (!isValidArgs(args)) {
 			System.out.println("255");
 			cleanExit();
-			return;
-		} else {
+		}
 
-			Security.addProvider(new BouncyCastleProvider());
-			int port = PORT;
-			String auth_file = AUTH_FILE;
-			try {
-				//tratar argumentos da consola
-				if (args.length > 4) {
-					System.out.println("255");
-					return;
-				} else if (args.length != 0) {
-					if (args[0].trim().equals(ARGS_PORT) && args[2].trim().equals(ARGS_AUTH_FILE)) {
-						port = Integer.parseInt(args[1]);
-						auth_file = args[3].trim();
-					} else if (args[2].trim().equals(ARGS_PORT) && args[0].trim().equals(ARGS_AUTH_FILE)) {
-						port = Integer.parseInt(args[3]);
-						auth_file = args[1].trim();
-					}
-				}
+		config = getConfigFromArgs(args);
 
-				KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
-				FileUtils.savePublicKey(rsaKeyPair.getPublic(), auth_file);
-				//System.out.println("chave publica banco: " + rsaKeyPair.getPublic().toString());
-				serverSocket = new ServerSocket(port);
-				System.out.println("Bank server listening on port " + port);
+		Security.addProvider(new BouncyCastleProvider());
+		try {
+			KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
+			FileUtils.savePublicKey(rsaKeyPair.getPublic(), config.authFile);
+			// System.out.println("chave publica banco: " +
+			// rsaKeyPair.getPublic().toString());
+			serverSocket = new ServerSocket(config.port);
+			System.out.println("Bank server listening on port " + config.port);
 
-				// Continuously accept client connections
-				while (true) {
-					Socket clientSocket = serverSocket.accept();
-					System.out.println("Accepted connection from " + clientSocket.getInetAddress());
-					new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
-				}
-
-			} catch (Exception e) {
-				e.printStackTrace();
+			// Continuously accept client connections
+			while (true) {
+				Socket clientSocket = serverSocket.accept();
+				System.out.println("Accepted connection from " + clientSocket.getInetAddress());
+				new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
 			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 
-	public static int genSeq() {
+	/**
+	 * This function returns true if all of its arguments are valid or false if any
+	 * aren't
+	 *
+	 * @param args args from atm start
+	 */
+	private boolean isValidArgs(String[] args) {
+		if (args.length > 4) {
+			printUsage(debug);
+			return false;
+		}
+
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].startsWith(ARGS_AUTH_FILE)) {
+				String authFilePath = extractArg(ARGS_AUTH_FILE, i, args);
+				if (!isValidFile(authFilePath))
+					return false;
+				if (args[i].equals(ARGS_AUTH_FILE)) {
+					i++;
+				}
+			} else if (args[i].startsWith(ARGS_PORT)) {
+				String port = extractArg(ARGS_PORT, i, args);
+				if (!isValidPort(port))
+					return false;
+				if (args[i].equals(ARGS_PORT)) {
+					i++;
+				}
+			} else { // Invalid argument
+				printUsage(debug);
+			}
+		}
+
+		return true;
+	}
+
+	private boolean isValidFile(String filename) {
+		if (filename == null || filename.isEmpty() || filename.length() > 127) {
+			return false;
+		}
+
+		String filenameRegex = "^[\\-_\\.0-9a-z]+$";
+		Pattern pattern = Pattern.compile(filenameRegex);
+		Matcher matcher = pattern.matcher(filename);
+		if (!matcher.matches()) {
+			return false;
+		}
+
+		File file = new File(filename);
+		return !file.exists();
+	}
+
+	/**
+	 * Validates a port if it is between 1024 and 65535
+	 *
+	 * @param input port to be verified
+	 * @return true if it is a valid port, false otherwise
+	 */
+	private boolean isValidPort(String input) {
+		if (!canConvertStringToInt(input)) {
+			return false;
+		}
+		int port = Integer.parseInt(input);
+		boolean isPortInRange = port >= 1024 && port <= 65535;
+		return isPortInRange;
+	}
+
+	private boolean canConvertStringToInt(String str) {
+		try {
+			Integer.parseInt(str);
+		} catch (Exception e) {
+			return false;
+		}
+		return true;
+	}
+
+	private ServerConfig getConfigFromArgs(String[] args) {
+		config = new ServerConfig(ARGS_AUTH_FILE, DEFAULT_PORT);
+
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].startsWith("-s")) {
+				config.authFile = extractArg("-s", i, args);
+				if (args[i].equals(ARGS_AUTH_FILE)) {
+					i++;
+				}
+			} else if (args[i].startsWith("-p")) {
+				config.port = Integer.parseInt(extractArg("-p", i, args));
+				if (args[i].equals(ARGS_AUTH_FILE)) {
+					i++;
+				}
+			}
+		}
+
+		return config;
+	}
+
+	public int genSeq() {
 		SecureRandom random = new SecureRandom();
-		//byte[] nonce = new byte[8];
-		//random.nextBytes(nonce);
 		return random.nextInt(100000, 999999);
 	}
 
 	// Handles a client connection and performs the handshake.
-	private static class ConnectionHandler implements Runnable {
+	private class ConnectionHandler implements Runnable {
 		private Socket socket;
 		private KeyPair keyPair;
 		private SecureSocket secureSocket;
@@ -96,16 +179,16 @@ public class BankServer {
 
 		public void run() {
 			try {
-				
+
 				secureSocket = new SecureSocket(socket, keyPair);
-				if (performHandshake()) {	
+				if (performHandshake()) {
 					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
 					// Further processing (e.g., transaction handling) would follow here
 					ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
 
 					// Send Sequential Number
 					byte[] EncryptedMessageSend = ECDHKey.encrypt(String.valueOf(SequenceNumber));
-					secureSocket.sendMessage(EncryptedMessageSend);	
+					secureSocket.sendMessage(EncryptedMessageSend);
 
 					// Receive Client Arguments With the right Sequential Number
 					byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
@@ -113,51 +196,51 @@ public class BankServer {
 					String[] ClientArgs = ClientArguments.split(" ");
 
 					/*
-					for (String word : ClientArgs){
-						System.out.println(word);
-					}*/
+					 * for (String word : ClientArgs){
+					 * System.out.println(word);
+					 * }
+					 */
 
-					
 					// Validate Sequence Number for Replay attacks
-					if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))){
+					if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))) {
 						SequenceNumber++;
 
 						// Arguments Processing
 						Accounts Account = new Accounts();
 						boolean createAccount = false, deposit = false, withdraw = false, get = false;
-						int CounterOperations=0;
+						int CounterOperations = 0;
 
-						for (int i = 0;i<ClientArgs.length-1;i=i+2){
-							switch (ClientArgs[i]){
+						for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
+							switch (ClientArgs[i]) {
 								case "-c":
-									Account.setCardFile(ClientArgs[i+1]);
-								break;
+									Account.setCardFile(ClientArgs[i + 1]);
+									break;
 								case "-a":
-									Account.setName(ClientArgs[i+1]);
-								break;
+									Account.setName(ClientArgs[i + 1]);
+									break;
 								case "-n":
 									createAccount = true;
-									Account.setBalance(Double.parseDouble(ClientArgs[i+1]));
+									Account.setBalance(Double.parseDouble(ClientArgs[i + 1]));
 									CounterOperations++;
-								break;
+									break;
 								case "-d":
 									deposit = true;
-									Account.addBalance(Double.parseDouble(ClientArgs[i+1]));
+									Account.addBalance(Double.parseDouble(ClientArgs[i + 1]));
 									CounterOperations++;
-								break;
+									break;
 								case "-w":
 									withdraw = true;
-									Account.LessBalance(Double.parseDouble(ClientArgs[i+1]));
+									Account.LessBalance(Double.parseDouble(ClientArgs[i + 1]));
 									CounterOperations++;
-								break;
+									break;
 								case "-g":
 									get = true;
-								break;
+									break;
 							}
-							if (CounterOperations==1){
-								
+							if (CounterOperations == 1) {
+
 							}
-						}				
+						}
 					}
 				} else {
 					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
@@ -176,7 +259,8 @@ public class BankServer {
 		private boolean performHandshake() throws Exception {
 			// Step 1: Receive the client’s public key.
 			byte[] clientMessage = secureSocket.receiveMessage();
-			byte[] atmPublicKeyBytes = RSAKeyUtils.decryptData(clientMessage, secureSocket.getKeyPair().getPrivate()/* secureSocket.keyPair.getPrivate() */);
+			byte[] atmPublicKeyBytes = RSAKeyUtils.decryptData(clientMessage,
+					secureSocket.getKeyPair().getPrivate()/* secureSocket.keyPair.getPrivate() */);
 			PublicKey atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
 			this.atmPublicKey = atmPublicKey;
 
@@ -191,6 +275,7 @@ public class BankServer {
 			byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
 
 			// Sign the ECDH public key using the server's RSA private key.
+			// TODO por cima disto cifrar com a pubica do atm e no lado do atm fazer o mesmo
 			byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, keyPair.getPrivate());
 
 			// Send the ECDH public key and its RSA signature.
@@ -201,7 +286,7 @@ public class BankServer {
 
 			// Receive the client's ECDH public key and RSA signature.
 			byte[] clientEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
-			byte[] clientSignature = secureSocket.receiveMessage(); //(byte[]) ois.readObject();
+			byte[] clientSignature = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
 			System.out.println("Received client's ECDH public key and RSA signature.");
 
 			// Verify the client's signature using the client's RSA public key.
@@ -221,92 +306,25 @@ public class BankServer {
 			keyAgree.doPhase(clientEcdhPubKey, true);
 			sharedSecret = keyAgree.generateSecret();
 
-			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));					
+			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
 			return true;
 		}
 	}
 
-	/**
-	 * This function returns true if all of its arguments are valid or false if any aren't
-	 *
-	 * @param args args from atm start
-	 */
-	//REVER ISTO
-	private static boolean validateArgs(String[] args) throws IOException {
-
-		if (args.length > 4) {
-			printUsage(debug);
-			cleanExit();
-			return false;
-		}
-
-		for (int i = 0; i < args.length; i += 2) {
-			if (args[i].startsWith("-s")) {
-				String authFilePath = extractArg("-s", i, args);
-				 if (!fileValidation(authFilePath)) return false;
-			} else if (args[i].startsWith("-p")) {
-				String port = extractArg("-p", i, args);
-				if (!portValidation(port)) return false;
-			} else { // Invalid argument
-				printUsage(debug);
-				cleanExit();
-			}
-		}
-		return true;
-	}
-
-	/**
-	 * Validates a port if it is between 1024 and 65535
-	 *
-	 * @param input port to be verified
-	 * @return true if it is a valid port, false otherwise
-	 */
-	private static boolean portValidation(String input) throws IOException {
-		if (!canConvertStringToInt(input)) {
-			cleanExit();
-			return false;
-		}
-		int port = Integer.parseInt(input);
-		return port < 1024 || port > 65535;
-	}
-
-	private static boolean canConvertStringToInt(String str) {
-		try {
-			Integer.parseInt(str);
-		} catch (Exception e) {
-			return false;
-		}
-		return true;
-	}
-
-	private static void cleanExit() throws IOException {
+	private void cleanExit() {
 		printUsage(debug);
-		//nao eh necessario mas eh uma boa pratica
+		// nao eh necessario mas eh uma boa pratica
 		if (!serverSocket.isClosed()) {
-			serverSocket.close();
+			try {
+				serverSocket.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 		System.exit(EXIT_FAILURE);
 	}
 
-	private static boolean fileValidation(String filename) throws IOException {
-		if (filename == null || filename.isEmpty() || filename.length() > 127) {
-			cleanExit();
-		} else {
-			String filenameRegex = "^[\\-_\\.0-9a-z]+$";
-			Pattern pattern = Pattern.compile(filenameRegex);
-			Matcher matcher = pattern.matcher(filename);
-
-			File file = new File(filename);
-			if (!file.exists()) {
-				System.out.print(debug ? String.format("%s: no such file\n", filename) : "");
-				cleanExit();
-			}
-			return matcher.matches();
-		}
-		return false;
-	}
-
-	private static String extractArg(String option, int i, String[] args) throws IOException {
+	private String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
 			printUsage(debug);
 			cleanExit();
@@ -314,18 +332,17 @@ public class BankServer {
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
 
-	private static void printUsage(boolean verbose) {
-		System.out.println("Usage: ATMClient [-s <auth-file>] [-i <ip-address>] [-p <port>]");
-		System.out.println("                 [-c <card-file>] -a <account> -n <balance>");
-		System.out.println("Options:");
-		System.out.println("  -s <auth-file>   : Authentication file (default: bank.auth)");
-		System.out.println("  -i <ip-address>  : Server IP address (default: 127.0.0.1)");
-		System.out.println("  -p <port>        : Server port (default: 3000)");
-		System.out.println("  -c <card-file>   : Card file (default: <account>.card)");
-		System.out.println("  -a <account>     : Account name (required)");
-		System.out.println("  -n <balance>     : Create new account with balance amount (format: XX.XX)");
-		System.out.println("  -d <balance>     : Deposit balance amount (format: XX.XX)");
-		System.out.println("  -w <balance>     : Withdraw balance amount (format: XX.XX)");
-		System.out.println("  -g				 : Get balance amount (format: XX.XX)");
+	private void printUsage(boolean verbose) {
+		System.out.println("Usage: BankServer [-s <auth-file>] [-p <port>]");
+	}
+
+	private class ServerConfig {
+		public String authFile;
+		public int port;
+
+		ServerConfig(String authFile, int port) {
+			this.authFile = authFile;
+			this.port = port;
+		}
 	}
 }

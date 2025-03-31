@@ -11,6 +11,8 @@ import java.security.KeyPairGenerator;
 import java.security.Security;
 import java.security.spec.X509EncodedKeySpec;
 import javax.crypto.KeyAgreement;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
@@ -22,15 +24,34 @@ public class ATMClient {
 	private static final String SERVER_IP = "127.0.0.1";
 	private static final int SERVER_PORT = 3000;
 	private static final String AUTH_FILE = "bank.auth"; // Shared auth file
-	private static SecureSocket secureSocket = null;
-	private static byte[] sharedSecret;
+	private static final String CARD_FILE = "card.file"; // Shared auth file
+
 	private static final boolean verbose = false;
 
+	private byte[] sharedSecret;
+	private ATMConfig config;
+	private SecureSocket secureSocket = null;
+
 	public static void main(String[] args) {
+		new ATMClient(args);
+	}
+
+	public ATMClient(String[] args) {
+		if (!isValidArgs(args)) {
+			cleanExit();
+		}
+
+		config = getConfigFromArgs(args);
+
+		// init()
 		try {
-			validateArgs(args);
 			Security.addProvider(new BouncyCastleProvider());
 			KeyPair atmKeyPair = RSAKeyUtils.generateRSAKeyPair();
+			KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+			keyGen.init(128);
+			SecretKey secretKey = keyGen.generateKey();
+
+			FileUtils.saveClientPin(secretKey, "card.file");
 			// Load the shared secret key from the auth file.
 			PublicKey bankPublicKey = FileUtils.readPublicKey(AUTH_FILE);
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
@@ -40,7 +61,7 @@ public class ATMClient {
 				System.out.println("Mutual authentication successful!");
 				// Further processing after authentication can follow here.
 				ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
-				try{
+				try {
 					byte[] EncryptedMsg = secureSocket.receiveMessage();
 					String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
 					String arguments = String.join(" ", args);
@@ -48,8 +69,7 @@ public class ATMClient {
 					byte[] MessageArgs = ECDHKey.encrypt(arguments);
 					secureSocket.sendMessage(MessageArgs);
 					System.out.println("Sent: " + arguments + ", to the server!");
-				}
-				catch(Exception e){
+				} catch (Exception e) {
 
 				}
 			} else {
@@ -58,115 +78,153 @@ public class ATMClient {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		cleanExit();
+
+		run(args);
 	}
 
 	// Implements the handshake protocol.
-	private static boolean performHandshake(SecureSocket secureSocket) throws Exception {
-		byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptData(
-				secureSocket.getKeyPair().getPublic().getEncoded(),
-				secureSocket.getBankPublicKey());
-		secureSocket.sendMessage(atmPublicKeyEncrypted);
+	private boolean performHandshake(SecureSocket secureSocket) {
+		try {
+			byte[] atmPublicKeyEncrypted = RSAKeyUtils.encryptData(
+					secureSocket.getKeyPair().getPublic().getEncoded(),
+					secureSocket.getBankPublicKey());
+			secureSocket.sendMessage(atmPublicKeyEncrypted);
 
-		// Generate an ephemeral ECDH key pair.
-		ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
-		KeyPairGenerator keyGen = KeyPairGenerator.getInstance("ECDH", "BC");
-		keyGen.initialize(ecSpec);
-		KeyPair ecdhKeyPair = keyGen.generateKeyPair();
-		byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
+			// Generate an ephemeral ECDH key pair.
+			ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
+			KeyPairGenerator keyGen = KeyPairGenerator.getInstance("ECDH", "BC");
+			keyGen.initialize(ecSpec);
+			KeyPair ecdhKeyPair = keyGen.generateKeyPair();
+			byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
 
-		// Sign the ECDH public key using the client's RSA private key.
-		byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, secureSocket.getKeyPair().getPrivate());
+			// Sign the ECDH public key using the client's RSA private key.
+			byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, secureSocket.getKeyPair().getPrivate());
 
-		// Receive the server's ECDH public key and RSA signature.
-		byte[] serverEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
-		byte[] serverSignature = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
-		System.out.println("Received server's ECDH public key and RSA signature.");
+			// Receive the server's ECDH public key and RSA signature.
+			byte[] serverEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
+			byte[] serverSignature = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
+			System.out.println("Received server's ECDH public key and RSA signature.");
 
-		// Verify the server's signature using the server's RSA public key.
-		if (!RSAKeyUtils.verifySignature(serverEcdhPubKeyEncoded, serverSignature,
-				secureSocket.getBankPublicKey()/* secureSocket.bankPublicKey */)) {
-			secureSocket.close();// secureSocket.socket.close(); // socket.close();
-			throw new SecurityException("Server's RSA signature verification failed!");
-		}
-		System.out.println("Server's RSA signature verified.");
-
-		// Send the client's ECDH public key and RSA signature.
-		secureSocket.sendMessage(ecdhPubKeyEncoded); // oos.writeObject(ecdhPubKeyEncoded);
-		secureSocket.sendMessage(signature);// oos.writeObject(signature);
-		secureSocket.flush();// oos.flush();
-		System.out.println("Sent client's ECDH public key and RSA signature.");
-
-		// Reconstruct the server's ECDH public key.
-		KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
-		X509EncodedKeySpec keySpec = new X509EncodedKeySpec(serverEcdhPubKeyEncoded);
-		PublicKey serverEcdhPubKey = keyFactory.generatePublic(keySpec);
-
-		// Perform the ECDH key agreement.
-		KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
-		keyAgree.init(ecdhKeyPair.getPrivate());
-		keyAgree.doPhase(serverEcdhPubKey, true);
-		sharedSecret = keyAgree.generateSecret();
-		System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
-		//System.out.println(sharedSecret.length);
-
-		return true;
-	}
-
-	private static boolean validateArgs(String[] args) throws IOException {
-		if (args.length < 2 || args.length > 12) {
-			if (verbose) printUsage();
-
-			cleanExit();
-			return false;
-		}
-
-		for (int i = 0; i < args.length; i+=2) {
-			if (args[i].startsWith("-s")) {
-				String authFilePath = extractArg("-s", i, args);
-				if (!fileValidation(authFilePath)) cleanExit(); return false;
-			} else if (args[i].startsWith("-i")) {
-				String ipAddress = extractArg("-i", i, args);
-				if (!ipValidation(ipAddress)) cleanExit(); return false;
-			} else if (args[i].startsWith("-p")) {
-				String port = extractArg("-p", i, args);
-				if (!portValidation(port)) cleanExit(); return false;
-			} else if (args[i].startsWith("-c")) {
-				String cardFilePath = extractArg("-c", i, args);
-				if (!fileValidation(cardFilePath)) cleanExit(); return false;
-			} else if (args[i].startsWith("-a")) {
-				String account = extractArg("-a", i, args);
-				if (!accountValidation(account)) cleanExit(); return false;
-			} else if (args[i].startsWith("-n")) {
-				String balance = extractArg("-n", i, args);
-				if (!balanceValidation(balance)) cleanExit(); return false;
-			} else if (args[i].startsWith("-d")) {
-				String balance = extractArg("-d", i, args);
-				if (!balanceValidation(balance)) cleanExit(); return false;
-			} else if (args[i].startsWith("-w")) {
-				String balance = extractArg("-w", i, args);
-				if (!balanceValidation(balance)) cleanExit(); return false;
-			} else if (args[i].startsWith("-g")) {
-				if (!args[i].equals("-g")) {
-					if (verbose) printUsage(); cleanExit();
-				}
-			} else { // Invalid argument
-				if (verbose) printUsage(); cleanExit();
+			// Verify the server's signature using the server's RSA public key.
+			if (!RSAKeyUtils.verifySignature(serverEcdhPubKeyEncoded, serverSignature,
+					secureSocket.getBankPublicKey()/* secureSocket.bankPublicKey */)) {
+				secureSocket.close();// secureSocket.socket.close(); // socket.close();
+				throw new SecurityException("Server's RSA signature verification failed!");
 			}
+			System.out.println("Server's RSA signature verified.");
+
+			// Send the client's ECDH public key and RSA signature.
+			secureSocket.sendMessage(ecdhPubKeyEncoded); // oos.writeObject(ecdhPubKeyEncoded);
+			secureSocket.sendMessage(signature);// oos.writeObject(signature);
+			secureSocket.flush();// oos.flush();
+			System.out.println("Sent client's ECDH public key and RSA signature.");
+
+			// Reconstruct the server's ECDH public key.
+			KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
+			X509EncodedKeySpec keySpec = new X509EncodedKeySpec(serverEcdhPubKeyEncoded);
+			PublicKey serverEcdhPubKey = keyFactory.generatePublic(keySpec);
+
+			// Perform the ECDH key agreement.
+			KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
+			keyAgree.init(ecdhKeyPair.getPrivate());
+			keyAgree.doPhase(serverEcdhPubKey, true);
+			sharedSecret = keyAgree.generateSecret();
+			System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
+
+			return true;
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 		return false;
 	}
 
-	private static String extractArg(String option, int i, String[] args) {
+	private boolean isValidArgs(String[] args) {
+		if (args.length < 2 || args.length > 12) {
+			if (verbose)
+				printUsage();
+			return false;
+		}
+
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].startsWith("-s")) {
+				String authFilePath = extractArg("-s", i, args);
+				if (!isValidAuthFile(authFilePath))
+					return false;
+				if (args[i].equals("-s")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-i")) {
+				String ipAddress = extractArg("-i", i, args);
+				if (!isValidIp(ipAddress))
+					return false;
+				if (args[i].equals("-i")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-p")) {
+				String port = extractArg("-p", i, args);
+				if (!isValidPort(port))
+					return false;
+				if (args[i].equals("-p")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-c")) {
+				String cardFilePath = extractArg("-c", i, args);
+				if (!isValidCardFile(cardFilePath))
+					return false;
+				if (args[i].equals("-c")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-a")) {
+				String account = extractArg("-a", i, args);
+				if (!isValidAccount(account))
+					return false;
+				if (args[i].equals("-a")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-n")) {
+				String balance = extractArg("-n", i, args);
+				if (!isValidBalance(balance))
+					return false;
+				if (args[i].equals("-n")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-d")) {
+				String balance = extractArg("-d", i, args);
+				if (!isValidBalance(balance))
+					return false;
+				if (args[i].equals("-d")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-w")) {
+				String balance = extractArg("-w", i, args);
+				if (!isValidBalance(balance))
+					return false;
+				if (args[i].equals("-w")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-g")) {
+				if (!args[i].equals("-g")) {
+					if (verbose)
+						printUsage();
+				}
+			} else { // Invalid argument
+				if (verbose)
+					printUsage();
+			}
+		}
+		return true;
+	}
+
+	private String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
-			//printUsage();
+			// printUsage();
 			cleanExit();
 		}
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
 
-	private static boolean balanceValidation(String input) {
-		if(!canConvertStringToDouble(input)){
+	private boolean isValidBalance(String input) {
+		if (!canConvertStringToDouble(input)) {
 			return false;
 		}
 
@@ -175,7 +233,7 @@ public class ATMClient {
 		return !(balance < 0.00 || balance > 4294967295.99);
 	}
 
-	private static boolean canConvertStringToDouble(String input){
+	private boolean canConvertStringToDouble(String input) {
 		try {
 			Double.parseDouble(input);
 		} catch (Exception e) {
@@ -191,7 +249,7 @@ public class ATMClient {
 	 * @param filename file name to be verified
 	 * @return true if it is a valid filename, false otherwise
 	 */
-	private static boolean fileValidation(String filename) {
+	private boolean isValidAuthFile(String filename) {
 		if (filename == null || filename.isEmpty() || filename.length() > 127) {
 			cleanExit();
 		} else {
@@ -202,7 +260,6 @@ public class ATMClient {
 			File file = new File(filename);
 			if (!file.exists()) {
 				System.out.print(debug ? String.format("%s: no such file\n", filename) : "");
-				cleanExit();
 			}
 			return matcher.matches();
 		}
@@ -211,12 +268,30 @@ public class ATMClient {
 
 	/**
 	 *
+	 * Does it make sense to allowa multiple "."?
+	 *
+	 * @param filename file name to be verified
+	 * @return true if it is a valid filename, false otherwise
+	 */
+	private boolean isValidCardFile(String filename) {
+		if (filename == null || filename.isEmpty() || filename.length() > 127) {
+			cleanExit();
+		}
+		String filenameRegex = "^[\\-_\\.0-9a-z]+$";
+		Pattern pattern = Pattern.compile(filenameRegex);
+		Matcher matcher = pattern.matcher(filename);
+
+		return matcher.matches();
+	}
+
+	/**
+	 *
 	 * @param account account name to be verified
 	 * @return true if it is a valid account name, false otherwise
 	 */
 	// TODO rever regex para aceitar "." e ".."
-	private static boolean accountValidation(String account) throws IOException {
-		if(account == null || account.isEmpty() || account.length() > 122){
+	private boolean isValidAccount(String account) {
+		if (account == null || account.isEmpty() || account.length() > 122) {
 			return false;
 		}
 		String regex = "^[\\-_\\.0-9a-z]+$";
@@ -232,8 +307,8 @@ public class ATMClient {
 	 * @param input ip to be verified
 	 * @return true if it is a valid ip, false otherwise
 	 */
-	private static boolean ipValidation(String input) {
-		if(input == null || input.isEmpty() || input.length() > 16){
+	private boolean isValidIp(String input) {
+		if (input == null || input.isEmpty() || input.length() > 16) {
 			cleanExit();
 			return false;
 		}
@@ -252,16 +327,15 @@ public class ATMClient {
 	 * @param input port to be verified
 	 * @return true if it is a valid port, false otherwise
 	 */
-	private static boolean portValidation(String input) {
+	private boolean isValidPort(String input) {
 		if (!canConvertStringToInt(input)) {
-			cleanExit();
 			return false;
 		}
 		int port = Integer.parseInt(input);
-		return port < 1024 || port > 65535;
+		return port >= 1024 && port <= 65535;
 	}
 
-	private static boolean canConvertStringToInt(String str) {
+	private boolean canConvertStringToInt(String str) {
 		try {
 			Integer.parseInt(str);
 		} catch (Exception e) {
@@ -270,7 +344,80 @@ public class ATMClient {
 		return true;
 	}
 
-	private static void printUsage() {
+	private ATMConfig getConfigFromArgs(String[] args) {
+		config = new ATMConfig(AUTH_FILE, SERVER_IP, SERVER_PORT);
+
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].startsWith("-s")) {
+				config.authFile = extractArg("-s", i, args);
+				if (args[i].equals(AUTH_FILE)) {
+					i++;
+				}
+			} else if (args[i].startsWith("-i")) {
+				config.serverPort = Integer.parseInt(extractArg("-i", i, args));
+				if (args[i].equals("-i")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-p")) {
+				config.serverPort = Integer.parseInt(extractArg("-p", i, args));
+				if (args[i].equals("-p")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-a")) {
+				String account = extractArg("-a", i, args);
+				config.account = account;
+				if(config.cardFile == null) {
+					config.cardFile = account + ".card";
+				}
+				if (args[i].equals("-a")) {
+					i++;
+				}
+			} else if (args[i].startsWith("-c")) {
+				String card = extractArg("-c", i, args);
+				config.cardFile = card;
+				if (args[i].equals("-c")) {
+					i++;
+				}
+			}
+		}
+
+		return config;
+	}
+
+	private void init() {
+	}
+
+	private void run(String[] args) {
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].startsWith("-n")) {
+				int balance = Integer.parseInt(extractArg("-n", i, args));
+				if (args[i].equals("-n")) {
+					i++;
+				}
+				// createAccount(balance);
+				return;
+			} else if (args[i].startsWith("-d")) {
+				int balance = Integer.parseInt(extractArg("-d", i, args));
+				if (args[i].equals("-d")) {
+					i++;
+				}
+				// deposit(balance);
+				return;
+			} else if (args[i].startsWith("-w")) {
+				int balance = Integer.parseInt(extractArg("-w", i, args));
+				if (args[i].equals("-w")) {
+					i++;
+				}
+				// withdraw(balance);
+				return;
+			} else if (args[i].startsWith("-g")) {
+				// get();
+				return;
+			}
+		}
+	}
+
+	private void printUsage() {
 		System.out.println("Usage: ATMClient [-s <auth-file>] [-i <ip-address>] [-p <port>]");
 		System.out.println("                 [-c <card-file>] -a <account> -n <balance>");
 		System.out.println("Options:");
@@ -286,13 +433,33 @@ public class ATMClient {
 	}
 
 	// enviar msg ao server de q este cliente fechou?
-	private static void cleanExit() {
-			//printUsage();
-			if (secureSocket.isClosed()) {
-				//nao eh necessario mas eh uma boa pratica
-				//secureSocket.closeStreams();
-				secureSocket.close();
-			}
-			System.exit(EXIT_FAILURE);
+	private void cleanExit() {
+		// printUsage();
+		if (!secureSocket.isClosed()) {
+			// nao eh necessario mas eh uma boa pratica
+			// secureSocket.closeStreams();
+			secureSocket.close();
+		}
+		System.exit(EXIT_FAILURE);
+	}
+
+	private class ATMConfig {
+		public String authFile;
+		public String serverIp;
+		public int serverPort;
+		public String cardFile;
+		public String account;
+
+		ATMConfig(String authFile, String serverIp, int serverPort) {
+			this.authFile = authFile;
+			this.serverIp = serverIp;
+			this.serverPort = serverPort;
+		}
+
+		@Override
+		public String toString() {
+			return String.format("ATMConfig[authFile=%s, serverIp=%s, serverPort=%d, cardFile=%s, account=%s]",
+				authFile, serverIp, serverPort, cardFile, account);
+		}
 	}
 }
