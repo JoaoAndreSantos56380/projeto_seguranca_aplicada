@@ -16,6 +16,8 @@ public class Account {
         this.name = name;
     }
 
+    public String getName (){ return this.name; }
+
     public void setCardFile (String cardFile){
         this.cardFile = cardFile;
     }
@@ -32,38 +34,28 @@ public class Account {
         this.balance -= value;
     }
 
-    public double getBalance (){
-        return this.balance;
-    }
+    public double getBalance (){ return this.balance; }
 
     public boolean verifyAccount() {
         return this.name != null && this.cardFile != null && this.balance != null;
     }
 
-    public String toJson() {
-        return "{" +
-                "\"account\":\"" + name + "\"," +
-                //THIS NEEDS TO BE REMOVED AFTER TESTING
-                "\"cardFile\":\"" + cardFile + "\"," +
-                "\"initial_balance\":" + balance +
-                "}";
-    }
-
     public String toJson(String operation, Double amount) {
-        StringBuilder json = new StringBuilder("{");
-        json.append("\"account\":\"").append(name).append("\",");
+        StringBuilder json = new StringBuilder("\"{\"account\":\"");
+        json.append(name).append("\",");
 
-        if ("balance".equals(operation)) {
-            json.append("\"balance\":").append(balance);
-        } else if ("withdraw".equals(operation)) {
-            json.append("\"withdraw\":").append(amount);
-        } else if ("deposit".equals(operation)) {
+        if (operation.equals("-n")) {
+            json.append("\"initial_balance\":").append(balance);
+        } else if (operation.equals("-d")) {
             json.append("\"deposit\":").append(amount);
-        } else {
-            throw new IllegalArgumentException("Invalid operation: " + operation);
+        } else if (operation.equals("-w")) {
+            json.append("\"withdraw\":").append(amount);
+        } else if (operation.equals("-g")) {
+            json.append("\"balance\":").append(balance);
         }
 
         json.append("}");
+        System.out.println(json);
         return json.toString();
     }
 }
