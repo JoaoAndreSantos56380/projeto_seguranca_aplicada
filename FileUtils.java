@@ -6,11 +6,22 @@ import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 
+import javax.crypto.SecretKey;
+
 public class FileUtils {
 	// Function 2: Save the Public Key to a File
 	public static void savePublicKey(PublicKey publicKey, String fileName) throws IOException {
 		// Get the encoded format of the public key
 		byte[] keyBytes = publicKey.getEncoded();
+		try (FileOutputStream fos = new FileOutputStream(fileName)) {
+			fos.write(keyBytes);
+		}
+	}
+
+	// Function 2: Save the Public Key to a File
+	public static void saveClientPin(SecretKey key, String fileName) throws IOException {
+		// Get the encoded format of the public key
+		byte[] keyBytes = key.getEncoded();
 		try (FileOutputStream fos = new FileOutputStream(fileName)) {
 			fos.write(keyBytes);
 		}
