@@ -23,6 +23,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 public class ATMClient {
 	private static final boolean debug = true;
 	private static final int EXIT_FAILURE = 255;
+	private static final int EXIT_SUCCESS = 0;
 	private static final String SERVER_IP = "127.0.0.1";
 	private static final int SERVER_PORT = 3000;
 	private static final String AUTH_FILE = "bank.auth"; // Shared auth file
@@ -45,7 +46,7 @@ public class ATMClient {
 
 		config = getConfigFromArgs(args);
 
-		addShutdownHook();
+		//addShutdownHook();
 
 		// init()
 		try {
@@ -89,6 +90,12 @@ public class ATMClient {
 		}
 
 		run(args);
+        try {
+			String json = secureSocket.receiveStringMessage();
+			successfullExit(json);
+        } catch (Exception e) {
+            cleanExit();
+        }
 	}
 
 // Implements the handshake protocol.
@@ -439,9 +446,6 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 				return;
 			}
 		}
-		//encerrar o cliente
-		//cleanExit();
-		//System.exit(0);
 	}
 
 	private void printUsage() {
@@ -468,6 +472,15 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 		System.exit(EXIT_FAILURE);
 	}
 
+	private void successfullExit(String json) {
+		if (secureSocket != null && secureSocket.isClosed()) {
+			secureSocket.close();
+		}
+		//print the operation
+		System.out.println(json);
+		System.exit(EXIT_SUCCESS);
+	}
+
 	private class ATMConfig {
 		public String authFile;
 		public String serverIp;
@@ -487,7 +500,7 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 				authFile, serverIp, serverPort, cardFile, account);
 		}
 	}
-
+	/*
 	private void addShutdownHook() {
 		ClientShutdown shutdownThread = new ClientShutdown();
 		Runtime.getRuntime().addShutdownHook(shutdownThread);
@@ -497,7 +510,7 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 		public void run() {
 			cleanExit();
 		}
-	}
+	}*/
 }
 
 

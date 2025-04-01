@@ -25,6 +25,7 @@ public class BankServer {
 	private static final String ARGS_PORT = "-p";
 	private static final int DEFAULT_PORT = 3000;
 	private static final int EXIT_FAILURE = 255;
+	private static final int EXIT_SUCCESS = 0;
 
 	// Attributes
 	private ServerConfig config;
@@ -190,110 +191,116 @@ public class BankServer {
 		 * This is called after validation
 		 */
 		public void run() {
-			try {
+			//to be in scope of the finally block
+            String json = null;
 
-				secureSocket = new SecureSocket(socket, keyPair);
-				if (performHandshake()) {
-					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
-					// Further processing (e.g., transaction handling) would follow here
-					ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+            try {
 
-					// Send Sequential Number
-					byte[] EncryptedMessageSend = ECDHKey.encrypt(String.valueOf(SequenceNumber));
-					secureSocket.sendMessage(EncryptedMessageSend);
+                secureSocket = new SecureSocket(socket, keyPair);
+                if (performHandshake()) {
+                    System.out.println("Mutual authentication successful with " + socket.getInetAddress());
+                    // Further processing (e.g., transaction handling) would follow here
+                    ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
 
-					// Receive Client Arguments With the right Sequential Number
-					byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
-					String ClientArguments = ECDHKey.decrypt(EncryptedMessageReceive);
-					String[] ClientArgs = ClientArguments.split(" ");
+                    // Send Sequential Number
+                    byte[] EncryptedMessageSend = ECDHKey.encrypt(String.valueOf(SequenceNumber));
+                    secureSocket.sendMessage(EncryptedMessageSend);
+
+                    // Receive Client Arguments With the right Sequential Number
+                    byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
+                    String ClientArguments = ECDHKey.decrypt(EncryptedMessageReceive);
+                    String[] ClientArgs = ClientArguments.split(" ");
 
 					/*
 					for (String word : ClientArgs){
 						System.out.println(word);
 					}*/
 
-					
-					// Validate Sequence Number for Replay attacks
-					if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))) {
-						SequenceNumber++;
 
-						// Arguments Processing
-						Account currentAccount = null;
-						boolean createAccFlag = false;
+                    // Validate Sequence Number for Replay attacks
+                    if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))) {
+                        SequenceNumber++;
 
-						//-a is required, and we need it to check if we already have that account created
-						for (int i = 0; i < ClientArgs.length - 1; i = i + 2){
-							if (ClientArgs[i].equals("-a")) {
-								//if it exists just update the current account
-								if (accounts.containsKey(ClientArgs[i+1])) {
-									currentAccount = accounts.get(ClientArgs[i+1]);
-								//if it doesn't exist
-								} else {
-									currentAccount = new Account(ClientArgs[i+1]);
-									accounts.put(ClientArgs[i+1], currentAccount);
-									createAccFlag = true;
-								}
-							}
-						}
+                        // Arguments Processing
+                        Account currentAccount = null;
+                        boolean createAccFlag = false;
+
+                        //-a is required, and we need it to check if we already have that account created
+                        for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
+                            if (ClientArgs[i].equals("-a")) {
+                                //if it exists just update the current account
+                                if (accounts.containsKey(ClientArgs[i + 1])) {
+                                    currentAccount = accounts.get(ClientArgs[i + 1]);
+                                    //if it doesn't exist
+                                } else {
+                                    currentAccount = new Account(ClientArgs[i + 1]);
+                                    accounts.put(ClientArgs[i + 1], currentAccount);
+                                    createAccFlag = true;
+                                }
+                            }
+                        }
 
 
-						for (int i = 0; i < ClientArgs.length - 1; i = i + 2){
-							if (ClientArgs[i + 1] != null && currentAccount != null) {
-								switch (ClientArgs[i]) {
-									//Optional parameters
-									case "-c":
-										//se foi criada anteriormente eh necessario dar set ao card file
-										if (createAccFlag) {
-											currentAccount.setCardFile(ClientArgs[i + 1]);
-										}
-										break;
+                        for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
+                            if (ClientArgs[i + 1] != null && currentAccount != null) {
+                                switch (ClientArgs[i]) {
+                                    //Optional parameters
+                                    case "-c":
+                                        //se foi criada anteriormente eh necessario dar set ao card file
+                                        if (createAccFlag) {
+                                            currentAccount.setCardFile(ClientArgs[i + 1]);
+                                        }
+                                        break;
 
-									//Modes of Operation
-									case "-n":
-										if (createAccFlag) {
-											currentAccount.setBalance(Double.parseDouble(ClientArgs[i + 1]));
-										} else {
-											//should execute, it means the account already exists
-										}
-										currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
-										break;
-									case "-d":
-										currentAccount.addBalance(Double.parseDouble(ClientArgs[i + 1]));
-										currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
-										break;
-									case "-w":
-										currentAccount.subBalance(Double.parseDouble(ClientArgs[i + 1]));
-										currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
-										break;
-									case "-g":
-										//TIRAR
-										if (createAccFlag) {
-											//should no execute, account was created now
-										}
-										currentAccount.toJson(ClientArgs[i], currentAccount.getBalance());
-										break;
-								}
-							} else System.out.println("Account is null or Args malformed");
-							//print the operation
-							//currentAccount.toJson(ClientArgs[i]);
-						}
+                                    //Modes of Operation
+                                    case "-n":
+                                        if (createAccFlag) {
+                                            currentAccount.setBalance(Double.parseDouble(ClientArgs[i + 1]));
+                                        } else {
+                                            //should execute, it means the account already exists
+                                        }
+                                        json = currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
+                                        break;
+                                    case "-d":
+                                        currentAccount.addBalance(Double.parseDouble(ClientArgs[i + 1]));
+                                        json = currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
+                                        break;
+                                    case "-w":
+                                        currentAccount.subBalance(Double.parseDouble(ClientArgs[i + 1]));
+                                        json = currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
+                                        break;
+                                    case "-g":
+                                        //TIRAR
+                                        if (createAccFlag) {
+                                            //should no execute, account was created now
+                                        }
+                                        json = currentAccount.toJson(ClientArgs[i], currentAccount.getBalance());
+                                        break;
+                                }
+                            } else System.out.println("Account is null or Args malformed");
+                            //print the operation
+                            //json = currentAccount.toJson(ClientArgs[i]);
+                        }
 
-					}
-				} else {
-					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
-				}
-			} catch (Exception e) {
-				System.out.println("Error during handshake: " + e.getMessage());
-			} finally {
-				//fechar socket cliente
-				try {
+                    }
+                } else {
+                    System.out.println("Mutual authentication failed with " + socket.getInetAddress());
+                }
+            } catch (Exception e) {
+                System.out.println("Error during handshake: " + e.getMessage());
+            } finally {
+
+                //fechar socket cliente
+                try {
+					secureSocket.sendMessage(json);
 					socket.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 //cleanExit();
             }
-		}
+        }
 
 		// Implements the handshake protocol.
 		private boolean performHandshake() throws Exception {
@@ -380,6 +387,17 @@ public class BankServer {
 		System.exit(EXIT_FAILURE);
 	}
 
+	private void closeClientSocket(Socket socket) {
+
+		if (serverSocket != null && !serverSocket.isClosed() && socket != null && !socket.isClosed()) {
+			try {
+				socket.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
 	private String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
 			printUsage(debug);
@@ -401,6 +419,7 @@ public class BankServer {
 			this.port = port;
 		}
 	}
+
 
 	private void addShutdownHook() {
 		ServerShutdown shutdownThread = new ServerShutdown();
