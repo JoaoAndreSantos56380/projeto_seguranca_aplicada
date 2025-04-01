@@ -45,7 +45,7 @@ public class Account {
     }
 
     public String toJson(String operation, Double amount) {
-        StringBuilder json = new StringBuilder("\"{\"account\":\"");
+        StringBuilder json = new StringBuilder("{\"account\":\"");
         json.append(name).append("\",");
 
         switch (operation) {
@@ -54,7 +54,6 @@ public class Account {
             case "-w" -> json.append("\"withdraw\":").append(amount);
             case "-g" -> json.append("\"balance\":").append(amount);
         }
-
         json.append("}");
         System.out.println(json);
         return json.toString();
