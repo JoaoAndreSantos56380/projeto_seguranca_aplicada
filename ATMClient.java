@@ -421,14 +421,14 @@ private boolean performHandshake(SecureSocket secureSocket) throws Exception {
 				return;
 			} else if (args[i].startsWith("-d")) {
 				//balance = Integer.parseInt(extractArg("-d", i, args));
-				balance = Double.parseDouble(extractArg("-n", i, args));
+				balance = Double.parseDouble(extractArg("-d", i, args));
 				if (args[i].equals("-d")) {
 					i++;
 				}
 				// deposit(balance);
 				return;
 			} else if (args[i].startsWith("-w")) {
-				balance = Double.parseDouble(extractArg("-n", i, args));
+				balance = Double.parseDouble(extractArg("-w", i, args));
 				if (args[i].equals("-w")) {
 					i++;
 				}
