@@ -6,6 +6,10 @@ public class Account {
     public Account() {
     }
 
+    public Account(String name) {
+        this.name = name;
+    }
+
     public Account(String name, String cardFile, Double balance) {
         this.name = name;
         this.cardFile = cardFile;
@@ -44,14 +48,11 @@ public class Account {
         StringBuilder json = new StringBuilder("\"{\"account\":\"");
         json.append(name).append("\",");
 
-        if (operation.equals("-n")) {
-            json.append("\"initial_balance\":").append(balance);
-        } else if (operation.equals("-d")) {
-            json.append("\"deposit\":").append(amount);
-        } else if (operation.equals("-w")) {
-            json.append("\"withdraw\":").append(amount);
-        } else if (operation.equals("-g")) {
-            json.append("\"balance\":").append(balance);
+        switch (operation) {
+            case "-n" -> json.append("\"initial_balance\":").append(amount);
+            case "-d" -> json.append("\"deposit\":").append(amount);
+            case "-w" -> json.append("\"withdraw\":").append(amount);
+            case "-g" -> json.append("\"balance\":").append(amount);
         }
 
         json.append("}");
