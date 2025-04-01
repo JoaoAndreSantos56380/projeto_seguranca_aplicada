@@ -1,19 +1,16 @@
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.security.*;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Arrays;
 
 import javax.crypto.KeyAgreement;
 
-import java.util.Random;
 //TODO verificar se ficheiro fornecido pelo input do user ja existe. se sim sair
 
 import org.bouncycastle.jce.ECNamedCurveTable;
@@ -34,7 +31,7 @@ public class BankServer {
 	private ServerSocket serverSocket;
 	private final SecureRandom random = new SecureRandom();
 	private int SequenceNumber = genSeq();
-	private HashSet<Account> accounts;
+	private HashMap<String, Account> accounts;
 
 	public static void main(String[] args) throws IOException {
 		new BankServer(args);
@@ -48,7 +45,7 @@ public class BankServer {
 
 		config = getConfigFromArgs(args);
 		//criar set de contas
-		accounts = new HashSet<>();
+		accounts = new HashMap<>();
 
 		Security.addProvider(new BouncyCastleProvider());
 		try {
@@ -221,54 +218,64 @@ public class BankServer {
 						SequenceNumber++;
 
 						// Arguments Processing
-						Account Account = new Account();
 						Account currentAccount = null;
+						boolean createAccFlag = false;
 
-						//MELHORAR ESTE CHECK
-						if (!accounts.contains(Account)) {
-							accounts.add(Account);
+						//-a is required, and we need it to check if we already have that account created
+						for (int i = 0; i < ClientArgs.length - 1; i = i + 2){
+							if (ClientArgs[i].equals("-a")) {
+								//if it exists just update the current account
+								if (accounts.containsKey(ClientArgs[i+1])) {
+									currentAccount = accounts.get(ClientArgs[i+1]);
+								//if it doesn't exist
+								} else {
+									currentAccount = new Account(ClientArgs[i+1]);
+									accounts.put(ClientArgs[i+1], currentAccount);
+									createAccFlag = true;
+								}
+							}
 						}
 
 
 						for (int i = 0; i < ClientArgs.length - 1; i = i + 2){
-
-							switch (ClientArgs[i]){
-								//Optional parameters
-								case "-c":
-									Account.setCardFile(ClientArgs[i+1]);
-								break;
-								case "-a":
-									/*
-									for (Account acc : accounts) {
-										if (acc.getName().equals(ClientArgs[i + 1])) {
-											currentAccount = acc;
-											break;
+							if (ClientArgs[i + 1] != null && currentAccount != null) {
+								switch (ClientArgs[i]) {
+									//Optional parameters
+									case "-c":
+										//se foi criada anteriormente eh necessario dar set ao card file
+										if (createAccFlag) {
+											currentAccount.setCardFile(ClientArgs[i + 1]);
 										}
-									}*/
+										break;
 
-									Account.setName(ClientArgs[i+1]);
-								break;
-
-								//Modes of Operation
-								case "-n":
-									Account.setBalance(Double.parseDouble(ClientArgs[i+1]));
-									Account.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i+1]));
-								break;
-								case "-d":
-									Account.addBalance(Double.parseDouble(ClientArgs[i+1]));
-								break;
-								case "-w":
-									Account.subBalance(Double.parseDouble(ClientArgs[i+1]));
-								break;
-								case "-g":
-									//TIRAR
-									Account.setBalance(4314.4);
-									Account.getBalance();
-									Account.toJson(ClientArgs[i], null);
-								break;
-							}
+									//Modes of Operation
+									case "-n":
+										if (createAccFlag) {
+											currentAccount.setBalance(Double.parseDouble(ClientArgs[i + 1]));
+										} else {
+											//should execute, it means the account already exists
+										}
+										currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
+										break;
+									case "-d":
+										currentAccount.addBalance(Double.parseDouble(ClientArgs[i + 1]));
+										currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
+										break;
+									case "-w":
+										currentAccount.subBalance(Double.parseDouble(ClientArgs[i + 1]));
+										currentAccount.toJson(ClientArgs[i], Double.parseDouble(ClientArgs[i + 1]));
+										break;
+									case "-g":
+										//TIRAR
+										if (createAccFlag) {
+											//should no execute, account was created now
+										}
+										currentAccount.toJson(ClientArgs[i], currentAccount.getBalance());
+										break;
+								}
+							} else System.out.println("Account is null or Args malformed");
 							//print the operation
-							//Account.toJson(ClientArgs[i]);
+							//currentAccount.toJson(ClientArgs[i]);
 						}
 
 					}
