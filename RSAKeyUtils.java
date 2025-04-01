@@ -50,21 +50,24 @@ public class RSAKeyUtils {
 		return publicKey.getEncoded();
 	}
 
-	public static byte[] encryptData(byte[] data, PublicKey publicKey) throws Exception {
-		// Create and initialize the RSA cipher for encryption with PKCS#1 padding
-		Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-		cipher.init(Cipher.ENCRYPT_MODE, publicKey);
-
-		// Maximum chunk size: 245 bytes for a 2048-bit key with PKCS#1 padding
-		int maxChunkSize = 245;
+	public static byte[] encryptData(byte[] data, PublicKey publicKey) {
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+		try {
+			// Create and initialize the RSA cipher for encryption with PKCS#1 padding
+			Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+			cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+			// Maximum chunk size: 245 bytes for a 2048-bit key with PKCS#1 padding
+			int maxChunkSize = 245;
 
-		// Process each chunk
-		for (int i = 0; i < data.length; i += maxChunkSize) {
-			int chunkSize = Math.min(maxChunkSize, data.length - i);
-			byte[] chunk = Arrays.copyOfRange(data, i, i + chunkSize);
-			byte[] encryptedChunk = cipher.doFinal(chunk);
-			outputStream.write(encryptedChunk);
+			// Process each chunk
+			for (int i = 0; i < data.length; i += maxChunkSize) {
+				int chunkSize = Math.min(maxChunkSize, data.length - i);
+				byte[] chunk = Arrays.copyOfRange(data, i, i + chunkSize);
+				byte[] encryptedChunk = cipher.doFinal(chunk);
+				outputStream.write(encryptedChunk);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 
 		return outputStream.toByteArray();
