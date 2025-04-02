@@ -1,7 +1,7 @@
 public class Account {
     private String name;
-    private String cardFile;
-    private Double balance;
+    private byte[] pin;
+    private double balance;
 
     public Account() {
     }
@@ -10,9 +10,9 @@ public class Account {
         this.name = name;
     }
 
-    public Account(String name, String cardFile, Double balance) {
+    public Account(String name, byte[] pin, double balance) {
         this.name = name;
-        this.cardFile = cardFile;
+        this.pin = pin;
         this.balance = balance;
     }
 
@@ -22,27 +22,27 @@ public class Account {
 
     public String getName (){ return this.name; }
 
-    public void setCardFile (String cardFile){
+    /* public void setCardFile (String cardFile){
         this.cardFile = cardFile;
-    }
+    } */
 
-    public void setBalance (Double value){
+    public void setBalance (double value){
         this.balance = value;
     }
 
-    public void addBalance (Double value){
+    public void addBalance (double value){
         this.balance += value;
     }
 
-    public void subBalance(Double value){
+    public void subBalance(double value){
         this.balance -= value;
     }
 
     public double getBalance (){ return this.balance; }
 
-    public boolean verifyAccount() {
+    /* public boolean verifyAccount() {
         return this.name != null && this.cardFile != null && this.balance != null;
-    }
+    } */
 
     public String toJson(String operation, Double amount) {
         StringBuilder json = new StringBuilder("{\"account\":\"");

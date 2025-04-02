@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.KeyAgreement;
@@ -31,7 +32,7 @@ public class BankServer {
 	private ServerConfig config;
 	private ServerSocket serverSocket;
 	private final SecureRandom random = new SecureRandom();
-	private int SequenceNumber = genSeq();
+	private int sequenceNumber = genSeq();
 	private HashMap<String, Account> accounts;
 
 	public static void main(String[] args) throws IOException {
@@ -150,7 +151,8 @@ public class BankServer {
 
 		config = new ServerConfig(DEFAULT_AUTH_FILE, DEFAULT_PORT);
 
-		addShutdownHook();
+		// TODO descomentar e por a dar certo
+		// addShutdownHook();
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-s")) {
@@ -178,7 +180,7 @@ public class BankServer {
 	private class ConnectionHandler implements Runnable {
 		private Socket socket;
 		private KeyPair keyPair;
-		//private SecureSocket secureSocket;
+		// private SecureSocket secureSocket;
 		private Connection connection;
 		private PublicKey atmPublicKey;
 		private byte[] sharedSecret;
@@ -197,21 +199,44 @@ public class BankServer {
 
 			try {
 				connection = new Connection(socket);
-				//secureSocket = new SecureSocket(socket, keyPair);
+				// secureSocket = new SecureSocket(socket, keyPair);
 				if (performHandshake()) {
 					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
 					// Further processing (e.g., transaction handling) would follow here
 					ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
 
 					// Send Sequential Number
-					byte[] EncryptedMessageSend = ECDHKey.encrypt(String.valueOf(SequenceNumber));
-					//secureSocket.sendMessage(EncryptedMessageSend);
+					byte[] EncryptedMessageSend = ECDHKey
+							.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber).array());
+					System.out.println(sequenceNumber);
+					// secureSocket.sendMessage(EncryptedMessageSend);
 					connection.send(EncryptedMessageSend);
 					// Receive Client Arguments With the right Sequential Number
-					//byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
-					byte[] EncryptedMessageReceive = connection.receive();
-					String ClientArguments = ECDHKey.decrypt(EncryptedMessageReceive);
-					String[] ClientArgs = ClientArguments.split(" ");
+					// byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
+					byte[] bytes = connection.receive();
+
+					MessageWithSequenceNumber msgWithSeq = decryptMessage(bytes, ECDHKey);
+					if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
+						Reply reply = new Reply(Status.NOT_OK);
+						connection.send(reply.toByteArray());
+					} else {
+						if (msgWithSeq.message.operation.op == Operations.NEW_ACCOUNT) {
+							if (msgWithSeq.message.operation.balance < 10.0) {
+								Reply reply = new Reply(Status.NOT_OK);
+								connection.send(reply.toByteArray());
+							}
+							accounts.put(msgWithSeq.message.account.name,
+									new Account(msgWithSeq.message.account.name,
+											msgWithSeq.message.account.PIN,
+											msgWithSeq.message.operation.balance));
+							connection.send(new Reply(Status.OK).toByteArray());
+						}
+					}
+					/*
+					 * String ClientArguments = new
+					 * String(ECDHKey.decrypt(EncryptedMessageReceive));
+					 * String[] ClientArgs = ClientArguments.split(" ");
+					 */
 
 					/*
 					 * for (String word : ClientArgs){
@@ -220,75 +245,78 @@ public class BankServer {
 					 */
 
 					// Validate Sequence Number for Replay attacks
-					if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber))) {
-						SequenceNumber++;
-
-						// Arguments Processing
-						Account currentAccount = null;
-						boolean createAccFlag = false;
-
-						// -a is required, and we need it to check if we already have that account
-						// created
-						for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
-							if (ClientArgs[i].equals("-a")) {
-								// if it exists just update the current account
-								if (accounts.containsKey(ClientArgs[i + 1])) {
-									currentAccount = accounts.get(ClientArgs[i + 1]);
-									// if it doesn't exist
-								} else {
-									currentAccount = new Account(ClientArgs[i + 1]);
-									accounts.put(ClientArgs[i + 1], currentAccount);
-									createAccFlag = true;
-								}
-							}
-						}
-
-						for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
-							if (ClientArgs[i + 1] != null && currentAccount != null) {
-								switch (ClientArgs[i]) {
-									// Optional parameters
-									case "-c":
-										// se foi criada anteriormente eh necessario dar set ao card file
-										if (createAccFlag) {
-											currentAccount.setCardFile(ClientArgs[i + 1]);
-										}
-										break;
-
-									// Modes of Operation
-									case "-n":
-										if (createAccFlag) {
-											currentAccount.setBalance(Double.parseDouble(ClientArgs[i + 1]));
-										} else {
-											// should execute, it means the account already exists
-										}
-										json = currentAccount.toJson(ClientArgs[i],
-												Double.parseDouble(ClientArgs[i + 1]));
-										break;
-									case "-d":
-										currentAccount.addBalance(Double.parseDouble(ClientArgs[i + 1]));
-										json = currentAccount.toJson(ClientArgs[i],
-												Double.parseDouble(ClientArgs[i + 1]));
-										break;
-									case "-w":
-										currentAccount.subBalance(Double.parseDouble(ClientArgs[i + 1]));
-										json = currentAccount.toJson(ClientArgs[i],
-												Double.parseDouble(ClientArgs[i + 1]));
-										break;
-									case "-g":
-										// TIRAR
-										if (createAccFlag) {
-											// should no execute, account was created now
-										}
-										json = currentAccount.toJson(ClientArgs[i], currentAccount.getBalance());
-										break;
-								}
-							} else
-								System.out.println("Account is null or Args malformed");
-							// print the operation
-							// json = currentAccount.toJson(ClientArgs[i]);
-						}
-
-					}
+					/*
+					 * if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber)))
+					 * {
+					 * SequenceNumber++;
+					 *
+					 * // Arguments Processing
+					 * Account currentAccount = null;
+					 * boolean createAccFlag = false;
+					 *
+					 * // -a is required, and we need it to check if we already have that account
+					 * // created
+					 * for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
+					 * if (ClientArgs[i].equals("-a")) {
+					 * // if it exists just update the current account
+					 * if (accounts.containsKey(ClientArgs[i + 1])) {
+					 * currentAccount = accounts.get(ClientArgs[i + 1]);
+					 * // if it doesn't exist
+					 * } else {
+					 * currentAccount = new Account(ClientArgs[i + 1]);
+					 * accounts.put(ClientArgs[i + 1], currentAccount);
+					 * createAccFlag = true;
+					 * }
+					 * }
+					 * }
+					 *
+					 * for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
+					 * if (ClientArgs[i + 1] != null && currentAccount != null) {
+					 * switch (ClientArgs[i]) {
+					 * // Optional parameters
+					 * case "-c":
+					 * // se foi criada anteriormente eh necessario dar set ao card file
+					 * if (createAccFlag) {
+					 * currentAccount.setCardFile(ClientArgs[i + 1]);
+					 * }
+					 * break;
+					 *
+					 * // Modes of Operation
+					 * case "-n":
+					 * if (createAccFlag) {
+					 * currentAccount.setBalance(Double.parseDouble(ClientArgs[i + 1]));
+					 * } else {
+					 * // should execute, it means the account already exists
+					 * }
+					 * json = currentAccount.toJson(ClientArgs[i],
+					 * Double.parseDouble(ClientArgs[i + 1]));
+					 * break;
+					 * case "-d":
+					 * currentAccount.addBalance(Double.parseDouble(ClientArgs[i + 1]));
+					 * json = currentAccount.toJson(ClientArgs[i],
+					 * Double.parseDouble(ClientArgs[i + 1]));
+					 * break;
+					 * case "-w":
+					 * currentAccount.subBalance(Double.parseDouble(ClientArgs[i + 1]));
+					 * json = currentAccount.toJson(ClientArgs[i],
+					 * Double.parseDouble(ClientArgs[i + 1]));
+					 * break;
+					 * case "-g":
+					 * // TIRAR
+					 * if (createAccFlag) {
+					 * // should no execute, account was created now
+					 * }
+					 * json = currentAccount.toJson(ClientArgs[i], currentAccount.getBalance());
+					 * break;
+					 * }
+					 * } else
+					 * System.out.println("Account is null or Args malformed");
+					 * // print the operation
+					 * // json = currentAccount.toJson(ClientArgs[i]);
+					 * }
+					 *
+					 * }
+					 */
 				} else {
 					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
 				}
@@ -298,7 +326,7 @@ public class BankServer {
 
 				// fechar socket cliente
 				try {
-					//secureSocket.sendMessage(json);
+					// secureSocket.sendMessage(json);
 					connection.send(json.getBytes());
 					socket.close();
 
@@ -309,10 +337,21 @@ public class BankServer {
 			}
 		}
 
+		private MessageWithSequenceNumber decryptMessage(byte[] bytes, ECDHAESEncryption ECDHKey) {
+			MessageWithSequenceNumber msg = null;
+			try {
+				byte[] decryptedBytes = ECDHKey.decrypt(bytes);
+				msg = MessageWithSequenceNumber.fromByteArray(decryptedBytes);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			return msg;
+		}
+
 		// Implements the handshake protocol.
 		private boolean performHandshake() throws Exception {
 			// Step 1: Receive the client’s public key.
-			byte[] clientMessage = connection.receive();//secureSocket.receiveMessage();
+			byte[] clientMessage = connection.receive();// secureSocket.receiveMessage();
 			byte[] atmPublicKeyBytes = RSAKeyUtils.decryptData(clientMessage,
 					/* secureSocket.getKeyPair() */keyPair.getPrivate()/* secureSocket.keyPair.getPrivate() */);
 			PublicKey atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
@@ -333,15 +372,17 @@ public class BankServer {
 			byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, keyPair.getPrivate());
 
 			// Send the ECDH public key and its RSA signature.
-			//secureSocket.sendMessage(ecdhPubKeyEncoded);
-			//secureSocket.sendMessage(signature);
+			// secureSocket.sendMessage(ecdhPubKeyEncoded);
+			// secureSocket.sendMessage(signature);
 			connection.send(ecdhPubKeyEncoded);
 			connection.send(signature);
 			System.out.println("Sent ECDH public key and RSA signature.");
 
 			// Receive the client's ECDH public key and RSA signature.
-			//byte[] clientEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
-			//byte[] clientSignature = secureSocket.receiveMessage(); // (byte[]) ois.readObject();
+			// byte[] clientEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[])
+			// ois.readObject();
+			// byte[] clientSignature = secureSocket.receiveMessage(); // (byte[])
+			// ois.readObject();
 			byte[] clientEcdhPubKeyEncoded = connection.receive(); // (byte[]) ois.readObject();
 			byte[] clientSignature = connection.receive(); // (byte[]) ois.readObject();
 			System.out.println("Received client's ECDH public key and RSA signature.");
@@ -431,14 +472,16 @@ public class BankServer {
 		}
 	}
 
-	private void addShutdownHook() {
-		ServerShutdown shutdownThread = new ServerShutdown();
-		Runtime.getRuntime().addShutdownHook(shutdownThread);
-	}
-
-	class ServerShutdown extends Thread {
-		public void run() {
-			cleanExit();
-		}
-	}
+	/*
+	 * private void addShutdownHook() {
+	 * ServerShutdown shutdownThread = new ServerShutdown();
+	 * Runtime.getRuntime().addShutdownHook(shutdownThread);
+	 * }
+	 *
+	 * class ServerShutdown extends Thread {
+	 * public void run() {
+	 * cleanExit();
+	 * }
+	 * }
+	 */
 }

@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -45,7 +46,7 @@ public class ATMClient {
 	private SecureSocket secureSocket = null;
 
 	public static void main(String[] args) {
-		//Security.addProvider(new BouncyCastleProvider());
+		// Security.addProvider(new BouncyCastleProvider());
 		new ATMClient(args);
 	}
 
@@ -61,47 +62,105 @@ public class ATMClient {
 
 		KeyPair atmKeyPair = generateKeyPair();
 		byte[] encryptedAtmPublicKey = encryptKey(atmKeyPair.getPublic(), config.bankPublicKey);
-
-
 		connection.send(encryptedAtmPublicKey);
+
 		syncSessionKeys(connection, atmKeyPair, config.bankPublicKey);
 
-		//remover depois pk isto e um mock
+		// remover depois pk isto e um mock
+		ECDHAESEncryption ECDHKey = getAESKeyFromSharesSecret();
+		/*
+		 * try {
+		 * ECDHKey = new ECDHAESEncryption(sharedSecret);
+		 * } catch (NoSuchAlgorithmException e) {
+		 * e.printStackTrace();
+		 * }
+		 */
+		/*
+		 * try {
+		 * //byte[] EncryptedMsg = secureSocket.receiveMessage();
+		 * byte[] EncryptedMsg = connection.receive();
+		 * String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
+		 * String arguments = String.join(" ", args);
+		 * arguments = arguments + " " + SequenceNumber;
+		 * byte[] MessageArgs = ECDHKey.encrypt(arguments);
+		 * //secureSocket.sendMessage(MessageArgs);
+		 * connection.send(MessageArgs);
+		 * System.out.println("Sent: " + arguments + ", to the server!");
+		 *
+		 * System.out.println("banco enviou antes de eu sair: " + connection.receive());
+		 * } catch (Exception e) {
+		 *
+		 * }
+		 */
+		// remover depois pk isto e um mock
+
+		// Obter número de sequência do servidor
+		int sequenceNumber = getSequenceNumber(connection.receive(), ECDHKey);
+
+		Operation op = getOperation(args);
+		// Gerar mensagem consoante args, com número de sequência
+		MessageWithSequenceNumber messageToEncrypt = new MessageWithSequenceNumber(new Message(account, op),
+				sequenceNumber+1);
+		// Encriptar mensagem com chave de sessão
+		byte[] encryptedMessage = encryptMessage(messageToEncrypt, ECDHKey);
+		// Enviar mensagem encriptada
+		connection.send(encryptedMessage);
+		// Obter "OK" ou "NOK"
+		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
+		System.out.println(reply.status);
+		// Exit
+		System.out.println("leaving...");
+		// init(args);
+		// run(args);
+	}
+
+	private byte[] encryptMessage(MessageWithSequenceNumber messageToEncrypt, ECDHAESEncryption ECDHKey) {
+		byte[] encryptedMessage = null;
+		try {
+			byte[] bytes = messageToEncrypt.toByteArray();
+			encryptedMessage = ECDHKey.encrypt(bytes);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return encryptedMessage;
+	}
+
+	private Operation getOperation(String[] args) {
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].startsWith("-n")) {
+				String balance = extractArg("-n", i, args);
+				return new Operation(Operations.NEW_ACCOUNT, Double.parseDouble(balance));
+			} else if (args[i].startsWith("-d")) {
+				String balance = extractArg("-d", i, args);
+				return new Operation(Operations.DEPOSIT, Double.parseDouble(balance));
+			} else if (args[i].startsWith("-w")) {
+				String balance = extractArg("-w", i, args);
+				return new Operation(Operations.WITHDRAW, Double.parseDouble(balance));
+			} else if (args[i].startsWith("-g")) {
+				return new Operation(Operations.NEW_ACCOUNT, -1);
+			}
+		}
+		return null;
+	}
+
+	private ECDHAESEncryption getAESKeyFromSharesSecret() {
 		ECDHAESEncryption ECDHKey = null;
 		try {
 			ECDHKey = new ECDHAESEncryption(sharedSecret);
 		} catch (NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		return ECDHKey;
+	}
+
+	private int getSequenceNumber(byte[] EncryptedMsg, ECDHAESEncryption ECDHKey) {
+		byte[] bytes = null;
 		try {
-			//byte[] EncryptedMsg = secureSocket.receiveMessage();
-			byte[] EncryptedMsg = connection.receive();
-			String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
-			String arguments = String.join(" ", args);
-			arguments = arguments + " " + SequenceNumber;
-			byte[] MessageArgs = ECDHKey.encrypt(arguments);
-			//secureSocket.sendMessage(MessageArgs);
-			connection.send(MessageArgs);
-			System.out.println("Sent: " + arguments + ", to the server!");
-
-			System.out.println("banco enviou antes de eu sair: " + connection.receive());
+			bytes = ECDHKey.decrypt(EncryptedMsg);
 		} catch (Exception e) {
-
+			e.printStackTrace();
 		}
-		//remover depois pk isto e um mock
-
-
-		// Obter número de sequência do servidor
-		// Gerar mensagem consoante args, com número de sequência
-		// Encriptar mensagem com chave de sessão
-		// Enviar mensagem encriptada
-		// Obter "OK" ou "NOK"
-		// Exit
-
-		//init(args);
-
-		//run(args);
+		return ByteBuffer.wrap(bytes).getInt();
 	}
 
 	private byte[] encryptKey(PublicKey publicKey, PublicKey bankPublicKey) {
@@ -378,11 +437,13 @@ public class ATMClient {
 		}
 
 		account.PIN = getAccountPIN(accountPINFilename);
-		if(account.PIN == null){
+		if (account.PIN == null) {
 			SecretKey key = generateAESkey();
-			if(key != null){
+			if (key != null) {
 				try (FileOutputStream out = new FileOutputStream(accountPINFilename)) {
 					out.write(key.getEncoded());
+					out.flush();
+					account.PIN = getAccountPIN(accountPINFilename);
 					System.out.println("File created and data written.");
 				} catch (IOException e) {
 					System.out.println("An error occurred.");
@@ -401,12 +462,12 @@ public class ATMClient {
 			bytes = Files.readAllBytes(path);
 		} catch (IOException e) {
 			return null;
-			//e.printStackTrace();
+			// e.printStackTrace();
 		}
 		return bytes;
 	}
 
-	private SecretKey generateAESkey(){
+	private SecretKey generateAESkey() {
 		KeyGenerator keyGen;
 		SecretKey secretKey = null;
 		try {
@@ -458,7 +519,7 @@ public class ATMClient {
 
 	private void syncSessionKeys(Connection connection, KeyPair atmKeyPair, PublicKey bankPublicKey) {
 		try {
-			//Security.addProvider(new BouncyCastleProvider());
+			// Security.addProvider(new BouncyCastleProvider());
 			// Generate an ephemeral ECDH key pair.
 			ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
 			KeyPairGenerator keyGen = KeyPairGenerator.getInstance("ECDH", "BC");
@@ -502,43 +563,45 @@ public class ATMClient {
 		}
 	}
 
-	/* private void init(String[] args) {
-		try {
-			Security.addProvider(new BouncyCastleProvider());
-			KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-			keyGen.init(128);
-			SecretKey secretKey = keyGen.generateKey();
-
-			FileUtils.saveClientPIN(secretKey, "card.file");
-			// Load the shared secret key from the auth file.
-			PublicKey bankPublicKey = FileUtils.readPublicKey(DEFAULT_AUTH_FILE);
-			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
-
-			if (socket.isClosed() || !socket.isConnected()) {
-				System.out.println("ERROR: socket is not connected");
-				cleanExit();
-			}
-
-			secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
-			if (syncSessionKeys(secureSocket)) {
-				System.out.println("Mutual authentication successful!");
-				// Further processing after authentication can follow here.
-				ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
-			} else {
-				System.out.println("Mutual authentication failed!");
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
-		// run(args);
-		try {
-			String json = secureSocket.receiveStringMessage();
-			successfullExit(json);
-		} catch (Exception e) {
-			cleanExit();
-		}
-	} */
+	/*
+	 * private void init(String[] args) {
+	 * try {
+	 * Security.addProvider(new BouncyCastleProvider());
+	 * KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+	 * keyGen.init(128);
+	 * SecretKey secretKey = keyGen.generateKey();
+	 *
+	 * FileUtils.saveClientPIN(secretKey, "card.file");
+	 * // Load the shared secret key from the auth file.
+	 * PublicKey bankPublicKey = FileUtils.readPublicKey(DEFAULT_AUTH_FILE);
+	 * Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+	 *
+	 * if (socket.isClosed() || !socket.isConnected()) {
+	 * System.out.println("ERROR: socket is not connected");
+	 * cleanExit();
+	 * }
+	 *
+	 * secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
+	 * if (syncSessionKeys(secureSocket)) {
+	 * System.out.println("Mutual authentication successful!");
+	 * // Further processing after authentication can follow here.
+	 * ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+	 * } else {
+	 * System.out.println("Mutual authentication failed!");
+	 * }
+	 * } catch (Exception e) {
+	 * e.printStackTrace();
+	 * }
+	 *
+	 * // run(args);
+	 * try {
+	 * String json = secureSocket.receiveStringMessage();
+	 * successfullExit(json);
+	 * } catch (Exception e) {
+	 * cleanExit();
+	 * }
+	 * }
+	 */
 
 	private void run(String[] args) {
 

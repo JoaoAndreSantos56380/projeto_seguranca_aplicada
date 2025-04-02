@@ -1,21 +1,11 @@
-public class Message {
-	String accountName;
-	byte[] pin;
-	Operations operation;
+import java.io.Serializable;
 
-	double balance;
+public class Message implements Serializable {
+	ClientAccount account;
+	Operation operation;
 
-	// Constructor
-	public Message(byte[] pin, Operations operation, double balance, String accountName) {
-		this.accountName = accountName;
-		this.pin = pin;
-		this.operation = operation;
-		this.balance = balance;
-	}
-
-	public Message(byte[] pin, Operations operation, String accountName) {
-		this.accountName = accountName;
-		this.pin = pin;
+	public Message(ClientAccount account, Operation operation) {
+		this.account = account;
 		this.operation = operation;
 	}
 }

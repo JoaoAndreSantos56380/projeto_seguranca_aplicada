@@ -18,7 +18,7 @@ public class ECDHAESEncryption {
         this.hmacKey = Arrays.copyOfRange(fullKey, 32, 64);
     }
 
-    public byte[] encrypt(String plaintext) throws Exception {
+    public byte[] encrypt(byte[] plaintext) throws Exception {
         // Generate random IV (12 bytes recommended for AES-GCM)
         SecureRandom secureRandom = new SecureRandom();
         byte[] iv = new byte[12];
@@ -31,13 +31,13 @@ public class ECDHAESEncryption {
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, gcmSpec);
 
         // Encrypt the message
-        byte[] ciphertext = cipher.doFinal(plaintext.getBytes());
+        byte[] ciphertext = cipher.doFinal(plaintext);
 
         // Compute HMAC
         Mac hmac = Mac.getInstance("HmacSHA256");
         SecretKey hmacSecretKey = new SecretKeySpec(hmacKey, "HmacSHA256");
         hmac.init(hmacSecretKey);
-        byte[] hmacValue = hmac.doFinal(plaintext.getBytes());
+        byte[] hmacValue = hmac.doFinal(plaintext);
 
         // Combine IV, ciphertext, and HMAC using ByteBuffer
         ByteBuffer buffer = ByteBuffer.allocate(iv.length + ciphertext.length + hmacValue.length);
@@ -49,7 +49,7 @@ public class ECDHAESEncryption {
         return buffer.array(); // Return as byte[] instead of Base64 encoded string
     }
 
-    public String decrypt(byte[] encryptedMessage) throws Exception {
+    public byte[] decrypt(byte[] encryptedMessage) throws Exception {
         ByteBuffer buffer = ByteBuffer.wrap(encryptedMessage);
 
         // Extract IV
@@ -83,6 +83,6 @@ public class ECDHAESEncryption {
             throw new SecurityException("HMAC verification failed!");
         }
 
-        return new String(plaintext); // Convert decrypted byte[] back to String
+        return plaintext; // Convert decrypted byte[] back to String
     }
 }
