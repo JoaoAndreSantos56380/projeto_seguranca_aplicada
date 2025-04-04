@@ -49,40 +49,47 @@ public class ECDHAESEncryption {
         return buffer.array(); // Return as byte[] instead of Base64 encoded string
     }
 
-    public byte[] decrypt(byte[] encryptedMessage) throws Exception {
-        ByteBuffer buffer = ByteBuffer.wrap(encryptedMessage);
+    public byte[] decrypt(byte[] encryptedMessage) {
 
-        // Extract IV
-        byte[] iv = new byte[12];
-        buffer.get(iv);
+        try {
 
-        // Extract ciphertext
-        byte[] ciphertext = new byte[buffer.remaining() - 32];
-        buffer.get(ciphertext);
+            ByteBuffer buffer = ByteBuffer.wrap(encryptedMessage);
 
-        // Extract HMAC
-        byte[] receivedHmac = new byte[32];
-        buffer.get(receivedHmac);
+            // Extract IV
+            byte[] iv = new byte[12];
+            buffer.get(iv);
 
-        // Initialize AES-GCM cipher for decryption
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
-        SecretKey secretKey = new SecretKeySpec(aesKey, "AES");
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec);
+            // Extract ciphertext
+            byte[] ciphertext = new byte[buffer.remaining() - 32];
+            buffer.get(ciphertext);
 
-        // Decrypt the message
-        byte[] plaintext = cipher.doFinal(ciphertext);
+            // Extract HMAC
+            byte[] receivedHmac = new byte[32];
+            buffer.get(receivedHmac);
 
-        // Verify HMAC
-        Mac hmac = Mac.getInstance("HmacSHA256");
-        SecretKey hmacSecretKey = new SecretKeySpec(hmacKey, "HmacSHA256");
-        hmac.init(hmacSecretKey);
-        byte[] computedHmac = hmac.doFinal(plaintext);
+            // Initialize AES-GCM cipher for decryption
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
+            SecretKey secretKey = new SecretKeySpec(aesKey, "AES");
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec);
 
-        if (!Arrays.equals(receivedHmac, computedHmac)) {
-            throw new SecurityException("HMAC verification failed!");
+            // Decrypt the message
+            byte[] plaintext = cipher.doFinal(ciphertext);
+
+            // Verify HMAC
+            Mac hmac = Mac.getInstance("HmacSHA256");
+            SecretKey hmacSecretKey = new SecretKeySpec(hmacKey, "HmacSHA256");
+            hmac.init(hmacSecretKey);
+            byte[] computedHmac = hmac.doFinal(plaintext);
+
+            if (!Arrays.equals(receivedHmac, computedHmac)) {
+                return null;
+                //throw new SecurityException("HMAC verification failed!");
+            }
+
+            return plaintext; // Convert decrypted byte[] back to String
+        } catch (Exception e) {
+            return null;
         }
-
-        return plaintext; // Convert decrypted byte[] back to String
     }
 }
