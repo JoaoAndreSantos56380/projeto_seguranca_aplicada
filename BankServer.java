@@ -293,7 +293,8 @@ public class BankServer {
 		private void sendSequenctialNumber(ECDHAESEncryption ECDHKey) {
 			byte[] EncryptedMessageSend = null;
 			try {
-				EncryptedMessageSend = ECDHKey.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber).array());
+				EncryptedMessageSend = ECDHKey.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber+1).array());
+				sequenceNumber++;
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();

@@ -145,7 +145,7 @@ public class ATMClient {
 			if (bytes == null) {
 				//Deserializacao do Seq num falhou
 				ERROR = EXIT_FAILURE;
-				System.exit(EXIT_FAILURE);
+				System.exit(ERROR);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
