@@ -44,15 +44,15 @@ public class Account {
         return this.name != null && this.cardFile != null && this.balance != null;
     } */
 
-    public String toJson(String operation, Double amount) {
+    public String toJson(Operations operation, double amount) {
         StringBuilder json = new StringBuilder("{\"account\":\"");
         json.append(name).append("\",");
 
         switch (operation) {
-            case "-n" -> json.append("\"initial_balance\":").append(amount);
-            case "-d" -> json.append("\"deposit\":").append(amount);
-            case "-w" -> json.append("\"withdraw\":").append(amount);
-            case "-g" -> json.append("\"balance\":").append(amount);
+            case NEW_ACCOUNT -> json.append("\"initial_balance\":").append(amount);
+            case DEPOSIT -> json.append("\"deposit\":").append(amount);
+            case WITHDRAW -> json.append("\"withdraw\":").append(amount);
+            case GET -> json.append("\"balance\":").append(amount);
         }
         json.append("}");
         System.out.println(json);

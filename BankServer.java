@@ -252,6 +252,7 @@ public class BankServer {
 		}
 
 		private void processRequest(MessageWithSequenceNumber msgWithSeq) {
+			Account currentAccount = null;
 			if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
 				Reply reply = new Reply(Status.NOT_OK);
 				try {
@@ -271,12 +272,14 @@ public class BankServer {
 							e.printStackTrace();
 						}
 					}
-					accounts.put(msgWithSeq.message.account.name,
-							new Account(msgWithSeq.message.account.name,
+					currentAccount = new Account(msgWithSeq.message.account.name,
 									msgWithSeq.message.account.PIN,
-									msgWithSeq.message.operation.balance));
+									msgWithSeq.message.operation.balance);
+					accounts.put(msgWithSeq.message.account.name,currentAccount);
+					//System.out.println(msgWithSeq.message.operation.balance);
+					String outputReply = currentAccount.toJson(msgWithSeq.message.operation.op, msgWithSeq.message.operation.balance);
 					try {
-						connection.send(new Reply(Status.OK).toByteArray());
+						connection.send(new Reply(Status.OK, outputReply).toByteArray());
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();

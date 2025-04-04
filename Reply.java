@@ -10,9 +10,16 @@ public class Reply implements Serializable{
 
 	double balance;
 
+	String output;
+
 	public Reply(Status status, double balance) {
 		this.status = status;
 		this.balance = balance;
+	}
+
+	public Reply(Status status, String output) {
+		this.status = status;
+		this.output = output;
 	}
 
 	public Reply(Status status) {
