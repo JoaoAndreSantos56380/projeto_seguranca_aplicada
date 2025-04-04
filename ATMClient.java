@@ -80,7 +80,7 @@ public class ATMClient {
 		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
 		System.out.println(reply.status);
 		// Exit
-		System.out.println("leaving...");
+		//System.out.println("leaving...");
 		// init(args);
 		// run(args);
 	}
@@ -360,6 +360,8 @@ public class ATMClient {
 
 	private ATMConfig getConfigFromArgs(String[] args) {
 		config = new ATMConfig(DEFAULT_AUTH_FILE, SERVER_IP, SERVER_PORT);
+
+		addShutdownHook();
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-s")) {
@@ -668,16 +670,11 @@ public class ATMClient {
 		}
 	}
 
-	/*
-	 * private void addShutdownHook() {
-	 * ClientShutdown shutdownThread = new ClientShutdown();
-	 * Runtime.getRuntime().addShutdownHook(shutdownThread);
-	 * }
-	 *
-	 * class ClientShutdown extends Thread {
-	 * public void run() {
-	 * cleanExit();
-	 * }
-	 * }
-	 */
+	private void addShutdownHook() {
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			System.out.println("\nShutdown signal received. Cleaning up...");
+			cleanExit();
+			System.out.println("Shutdown complete.");
+		}));
+	}
 }
