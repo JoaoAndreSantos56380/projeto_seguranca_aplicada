@@ -1,5 +1,4 @@
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.security.*;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -11,8 +10,6 @@ import java.nio.ByteBuffer;
 import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.KeyAgreement;
-
-//TODO verificar se ficheiro fornecido pelo input do user ja existe. se sim sair
 
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECParameterSpec;
@@ -31,6 +28,7 @@ public class BankServer {
 	// Attributes
 	private ServerConfig config;
 	private ServerSocket serverSocket;
+	private KeyPair rsaKeyPair;
 	private final SecureRandom random = new SecureRandom();
 	private int sequenceNumber = genSeq();
 	private HashMap<String, Account> accounts;
@@ -40,21 +38,23 @@ public class BankServer {
 	}
 
 	public BankServer(String[] args) {
+		Security.addProvider(new BouncyCastleProvider());
 		if (!isValidArgs(args)) {
 			System.out.println("255");
 			cleanExit();
 		}
 
 		config = getConfigFromArgs(args);
-		// criar set de contas
-		accounts = new HashMap<>();
 
-		Security.addProvider(new BouncyCastleProvider());
+		rsaKeyPair = createAuthFileAndKeyPair();
+		// criar set de contas
+		accounts = createAccountset();// new HashMap<>();
+
+		lauchServerSocketAndThreads();
+	}
+
+	private void lauchServerSocketAndThreads() {
 		try {
-			KeyPair rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
-			FileUtils.savePublicKey(rsaKeyPair.getPublic(), config.authFile);
-			// System.out.println("chave publica banco: " +
-			// rsaKeyPair.getPublic().toString());
 			// eh siupsoto aceitarmos apenas de um porto??
 			serverSocket = new ServerSocket(config.port);
 
@@ -74,6 +74,23 @@ public class BankServer {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+
+	private KeyPair createAuthFileAndKeyPair() {
+		KeyPair rsaKeyPair;
+		try {
+			rsaKeyPair = RSAKeyUtils.generateRSAKeyPair();
+			FileUtils.savePublicKey(rsaKeyPair.getPublic(), config.authFile);
+			return rsaKeyPair;
+		} catch (NoSuchAlgorithmException | IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+
+	}
+
+	private HashMap<String, Account> createAccountset() {
+		return new HashMap<>();
 	}
 
 	/**
@@ -180,10 +197,9 @@ public class BankServer {
 	private class ConnectionHandler implements Runnable {
 		private Socket socket;
 		private KeyPair keyPair;
-		// private SecureSocket secureSocket;
 		private Connection connection;
 		private PublicKey atmPublicKey;
-		private byte[] sharedSecret;
+		private byte[] sharedSecret = null;
 
 		public ConnectionHandler(Socket socket, KeyPair keyPair) {
 			this.socket = socket;
@@ -195,135 +211,29 @@ public class BankServer {
 		 */
 		public void run() {
 			// to be in scope of the finally block
-			String json = null;
+			String json = "ola";
 
 			try {
 				connection = new Connection(socket);
 				// secureSocket = new SecureSocket(socket, keyPair);
-				if (performHandshake()) {
+				getClientPublicKey();
+				syncSessionKeys();
+				if (sharedSecret != null) {
 					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
 					// Further processing (e.g., transaction handling) would follow here
-					ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
+					ECDHAESEncryption ECDHKey = getAESKeyFromSharesSecret();
 
 					// Send Sequential Number
-					byte[] EncryptedMessageSend = ECDHKey
-							.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber).array());
-					System.out.println(sequenceNumber);
-					// secureSocket.sendMessage(EncryptedMessageSend);
-					connection.send(EncryptedMessageSend);
-					// Receive Client Arguments With the right Sequential Number
-					// byte[] EncryptedMessageReceive = secureSocket.receiveMessage();
-					byte[] bytes = connection.receive();
+					sendSequenctialNumber(ECDHKey);
+					MessageWithSequenceNumber msgWithSeq = receiveMessage(ECDHKey);
 
-					MessageWithSequenceNumber msgWithSeq = decryptMessage(bytes, ECDHKey);
-					if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
-						Reply reply = new Reply(Status.NOT_OK);
-						connection.send(reply.toByteArray());
-					} else {
-						if (msgWithSeq.message.operation.op == Operations.NEW_ACCOUNT) {
-							if (msgWithSeq.message.operation.balance < 10.0) {
-								Reply reply = new Reply(Status.NOT_OK);
-								connection.send(reply.toByteArray());
-							}
-							accounts.put(msgWithSeq.message.account.name,
-									new Account(msgWithSeq.message.account.name,
-											msgWithSeq.message.account.PIN,
-											msgWithSeq.message.operation.balance));
-							connection.send(new Reply(Status.OK).toByteArray());
-						}
-					}
-					/*
-					 * String ClientArguments = new
-					 * String(ECDHKey.decrypt(EncryptedMessageReceive));
-					 * String[] ClientArgs = ClientArguments.split(" ");
-					 */
-
-					/*
-					 * for (String word : ClientArgs){
-					 * System.out.println(word);
-					 * }
-					 */
-
-					// Validate Sequence Number for Replay attacks
-					/*
-					 * if (ClientArgs[ClientArgs.length - 1].equals(String.valueOf(SequenceNumber)))
-					 * {
-					 * SequenceNumber++;
-					 *
-					 * // Arguments Processing
-					 * Account currentAccount = null;
-					 * boolean createAccFlag = false;
-					 *
-					 * // -a is required, and we need it to check if we already have that account
-					 * // created
-					 * for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
-					 * if (ClientArgs[i].equals("-a")) {
-					 * // if it exists just update the current account
-					 * if (accounts.containsKey(ClientArgs[i + 1])) {
-					 * currentAccount = accounts.get(ClientArgs[i + 1]);
-					 * // if it doesn't exist
-					 * } else {
-					 * currentAccount = new Account(ClientArgs[i + 1]);
-					 * accounts.put(ClientArgs[i + 1], currentAccount);
-					 * createAccFlag = true;
-					 * }
-					 * }
-					 * }
-					 *
-					 * for (int i = 0; i < ClientArgs.length - 1; i = i + 2) {
-					 * if (ClientArgs[i + 1] != null && currentAccount != null) {
-					 * switch (ClientArgs[i]) {
-					 * // Optional parameters
-					 * case "-c":
-					 * // se foi criada anteriormente eh necessario dar set ao card file
-					 * if (createAccFlag) {
-					 * currentAccount.setCardFile(ClientArgs[i + 1]);
-					 * }
-					 * break;
-					 *
-					 * // Modes of Operation
-					 * case "-n":
-					 * if (createAccFlag) {
-					 * currentAccount.setBalance(Double.parseDouble(ClientArgs[i + 1]));
-					 * } else {
-					 * // should execute, it means the account already exists
-					 * }
-					 * json = currentAccount.toJson(ClientArgs[i],
-					 * Double.parseDouble(ClientArgs[i + 1]));
-					 * break;
-					 * case "-d":
-					 * currentAccount.addBalance(Double.parseDouble(ClientArgs[i + 1]));
-					 * json = currentAccount.toJson(ClientArgs[i],
-					 * Double.parseDouble(ClientArgs[i + 1]));
-					 * break;
-					 * case "-w":
-					 * currentAccount.subBalance(Double.parseDouble(ClientArgs[i + 1]));
-					 * json = currentAccount.toJson(ClientArgs[i],
-					 * Double.parseDouble(ClientArgs[i + 1]));
-					 * break;
-					 * case "-g":
-					 * // TIRAR
-					 * if (createAccFlag) {
-					 * // should no execute, account was created now
-					 * }
-					 * json = currentAccount.toJson(ClientArgs[i], currentAccount.getBalance());
-					 * break;
-					 * }
-					 * } else
-					 * System.out.println("Account is null or Args malformed");
-					 * // print the operation
-					 * // json = currentAccount.toJson(ClientArgs[i]);
-					 * }
-					 *
-					 * }
-					 */
+					processRequest(msgWithSeq);
 				} else {
 					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
 				}
 			} catch (Exception e) {
 				System.out.println("Error during handshake: " + e.getMessage());
 			} finally {
-
 				// fechar socket cliente
 				try {
 					// secureSocket.sendMessage(json);
@@ -335,6 +245,127 @@ public class BankServer {
 				}
 				// cleanExit();
 			}
+		}
+
+		private void processRequest(MessageWithSequenceNumber msgWithSeq) {
+			if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
+				Reply reply = new Reply(Status.NOT_OK);
+				try {
+					connection.send(reply.toByteArray());
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			} else {
+				if (msgWithSeq.message.operation.op == Operations.NEW_ACCOUNT) {
+					if (msgWithSeq.message.operation.balance < 10.0) {
+						Reply reply = new Reply(Status.NOT_OK);
+						try {
+							connection.send(reply.toByteArray());
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+					accounts.put(msgWithSeq.message.account.name,
+							new Account(msgWithSeq.message.account.name,
+									msgWithSeq.message.account.PIN,
+									msgWithSeq.message.operation.balance));
+					try {
+						connection.send(new Reply(Status.OK).toByteArray());
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+
+		private MessageWithSequenceNumber receiveMessage(ECDHAESEncryption ECDHKey) {
+			byte[] bytes = connection.receive();
+			return decryptMessage(bytes, ECDHKey);
+		}
+
+		private void sendSequenctialNumber(ECDHAESEncryption ECDHKey) {
+			byte[] EncryptedMessageSend = null;
+			try {
+				EncryptedMessageSend = ECDHKey.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber).array());
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			System.out.println(sequenceNumber);
+			connection.send(EncryptedMessageSend);
+		}
+
+		private ECDHAESEncryption getAESKeyFromSharesSecret() {
+			ECDHAESEncryption ECDHKey = null;
+			try {
+				ECDHKey = new ECDHAESEncryption(sharedSecret);
+			} catch (NoSuchAlgorithmException e) {
+				e.printStackTrace();
+			}
+			return ECDHKey;
+		}
+
+		private void syncSessionKeys() {
+			try {
+				ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
+				KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("ECDH", "BC");
+				keyPairGenerator.initialize(ecSpec);
+				KeyPair ecdhKeyPair = keyPairGenerator.generateKeyPair();
+				// Get the encoded form of the ECDH public key.
+				byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
+
+				// Sign the ECDH public key using the server's RSA private key.
+				// TODO por cima disto cifrar com a pubica do atm e no lado do atm fazer o mesmo
+				byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, keyPair.getPrivate());
+
+				// Send the ECDH public key and its RSA signature.
+				connection.send(ecdhPubKeyEncoded);
+				connection.send(signature);
+				System.out.println("Sent ECDH public key and RSA signature.");
+
+				// Receive the client's ECDH public key and RSA signature.
+				byte[] clientEcdhPubKeyEncoded = connection.receive(); // (byte[]) ois.readObject();
+				byte[] clientSignature = connection.receive(); // (byte[]) ois.readObject();
+				System.out.println("Received client's ECDH public key and RSA signature.");
+
+				// Verify the client's signature using the client's RSA public key.
+				if (!RSAKeyUtils.verifySignature(clientEcdhPubKeyEncoded, clientSignature, atmPublicKey)) {
+					throw new SecurityException("Client's RSA signature verification failed!");
+				}
+				System.out.println("Client's RSA signature verified.");
+
+				// Reconstruct the client's ECDH public key.
+				KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
+				X509EncodedKeySpec keySpec = new X509EncodedKeySpec(clientEcdhPubKeyEncoded);
+				PublicKey clientEcdhPubKey = keyFactory.generatePublic(keySpec);
+
+				// Perform the ECDH key agreement.
+				KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
+				keyAgree.init(ecdhKeyPair.getPrivate());
+				keyAgree.doPhase(clientEcdhPubKey, true);
+				sharedSecret = keyAgree.generateSecret();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+
+			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
+		}
+
+		private void getClientPublicKey() {
+			byte[] clientMessage = connection.receive();
+			byte[] atmPublicKeyBytes;
+			PublicKey atmPublicKey = null;
+			try {
+				atmPublicKeyBytes = RSAKeyUtils.decryptData(clientMessage, keyPair.getPrivate());
+				atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			this.atmPublicKey = atmPublicKey;
 		}
 
 		private MessageWithSequenceNumber decryptMessage(byte[] bytes, ECDHAESEncryption ECDHKey) {
@@ -351,60 +382,63 @@ public class BankServer {
 		// Implements the handshake protocol.
 		private boolean performHandshake() throws Exception {
 			// Step 1: Receive the client’s public key.
-			byte[] clientMessage = connection.receive();// secureSocket.receiveMessage();
-			byte[] atmPublicKeyBytes = RSAKeyUtils.decryptData(clientMessage,
-					/* secureSocket.getKeyPair() */keyPair.getPrivate()/* secureSocket.keyPair.getPrivate() */);
-			PublicKey atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
-			this.atmPublicKey = atmPublicKey;
+			/*
+			 * byte[] clientMessage = connection.receive();
+			 * byte[] atmPublicKeyBytes =
+			 * RSAKeyUtils.decryptData(clientMessage,keyPair.getPrivate());
+			 * PublicKey atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
+			 * this.atmPublicKey = atmPublicKey;
+			 */
 
 			// Diffie–Hellman–Merkle key exchange
-
 			// Generate an ephemeral ECDH key pair using the named curve "prime256v1".
-			ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
-			KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("ECDH", "BC");
-			keyPairGenerator.initialize(ecSpec);
-			KeyPair ecdhKeyPair = keyPairGenerator.generateKeyPair();
-			// Get the encoded form of the ECDH public key.
-			byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
-
-			// Sign the ECDH public key using the server's RSA private key.
-			// TODO por cima disto cifrar com a pubica do atm e no lado do atm fazer o mesmo
-			byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded, keyPair.getPrivate());
-
-			// Send the ECDH public key and its RSA signature.
-			// secureSocket.sendMessage(ecdhPubKeyEncoded);
-			// secureSocket.sendMessage(signature);
-			connection.send(ecdhPubKeyEncoded);
-			connection.send(signature);
-			System.out.println("Sent ECDH public key and RSA signature.");
-
-			// Receive the client's ECDH public key and RSA signature.
-			// byte[] clientEcdhPubKeyEncoded = secureSocket.receiveMessage(); // (byte[])
-			// ois.readObject();
-			// byte[] clientSignature = secureSocket.receiveMessage(); // (byte[])
-			// ois.readObject();
-			byte[] clientEcdhPubKeyEncoded = connection.receive(); // (byte[]) ois.readObject();
-			byte[] clientSignature = connection.receive(); // (byte[]) ois.readObject();
-			System.out.println("Received client's ECDH public key and RSA signature.");
-
-			// Verify the client's signature using the client's RSA public key.
-			if (!RSAKeyUtils.verifySignature(clientEcdhPubKeyEncoded, clientSignature, atmPublicKey)) {
-				throw new SecurityException("Client's RSA signature verification failed!");
-			}
-			System.out.println("Client's RSA signature verified.");
-
-			// Reconstruct the client's ECDH public key.
-			KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
-			X509EncodedKeySpec keySpec = new X509EncodedKeySpec(clientEcdhPubKeyEncoded);
-			PublicKey clientEcdhPubKey = keyFactory.generatePublic(keySpec);
-
-			// Perform the ECDH key agreement.
-			KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
-			keyAgree.init(ecdhKeyPair.getPrivate());
-			keyAgree.doPhase(clientEcdhPubKey, true);
-			sharedSecret = keyAgree.generateSecret();
-
-			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
+			/*
+			 * ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
+			 * KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("ECDH",
+			 * "BC");
+			 * keyPairGenerator.initialize(ecSpec);
+			 * KeyPair ecdhKeyPair = keyPairGenerator.generateKeyPair();
+			 * // Get the encoded form of the ECDH public key.
+			 * byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
+			 *
+			 * // Sign the ECDH public key using the server's RSA private key.
+			 * // TODO por cima disto cifrar com a pubica do atm e no lado do atm fazer o
+			 * mesmo
+			 * byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded,
+			 * keyPair.getPrivate());
+			 *
+			 * // Send the ECDH public key and its RSA signature.
+			 * connection.send(ecdhPubKeyEncoded);
+			 * connection.send(signature);
+			 * System.out.println("Sent ECDH public key and RSA signature.");
+			 *
+			 * // Receive the client's ECDH public key and RSA signature.
+			 * byte[] clientEcdhPubKeyEncoded = connection.receive(); // (byte[])
+			 * ois.readObject();
+			 * byte[] clientSignature = connection.receive(); // (byte[]) ois.readObject();
+			 * System.out.println("Received client's ECDH public key and RSA signature.");
+			 *
+			 * // Verify the client's signature using the client's RSA public key.
+			 * if (!RSAKeyUtils.verifySignature(clientEcdhPubKeyEncoded, clientSignature,
+			 * atmPublicKey)) {
+			 * throw new SecurityException("Client's RSA signature verification failed!");
+			 * }
+			 * System.out.println("Client's RSA signature verified.");
+			 *
+			 * // Reconstruct the client's ECDH public key.
+			 * KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
+			 * X509EncodedKeySpec keySpec = new X509EncodedKeySpec(clientEcdhPubKeyEncoded);
+			 * PublicKey clientEcdhPubKey = keyFactory.generatePublic(keySpec);
+			 *
+			 * // Perform the ECDH key agreement.
+			 * KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
+			 * keyAgree.init(ecdhKeyPair.getPrivate());
+			 * keyAgree.doPhase(clientEcdhPubKey, true);
+			 * sharedSecret = keyAgree.generateSecret();
+			 *
+			 * System.out.println("Server computed shared secret: " +
+			 * Arrays.toString(sharedSecret));
+			 */
 			return true;
 		}
 	}

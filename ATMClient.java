@@ -9,16 +9,13 @@ import java.util.regex.Pattern;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.Key;
 import java.security.KeyFactory;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
 import java.security.Security;
 import java.security.spec.X509EncodedKeySpec;
 import javax.crypto.KeyAgreement;
@@ -46,7 +43,6 @@ public class ATMClient {
 	private SecureSocket secureSocket = null;
 
 	public static void main(String[] args) {
-		// Security.addProvider(new BouncyCastleProvider());
 		new ATMClient(args);
 	}
 
@@ -68,31 +64,6 @@ public class ATMClient {
 
 		// remover depois pk isto e um mock
 		ECDHAESEncryption ECDHKey = getAESKeyFromSharesSecret();
-		/*
-		 * try {
-		 * ECDHKey = new ECDHAESEncryption(sharedSecret);
-		 * } catch (NoSuchAlgorithmException e) {
-		 * e.printStackTrace();
-		 * }
-		 */
-		/*
-		 * try {
-		 * //byte[] EncryptedMsg = secureSocket.receiveMessage();
-		 * byte[] EncryptedMsg = connection.receive();
-		 * String SequenceNumber = ECDHKey.decrypt(EncryptedMsg);
-		 * String arguments = String.join(" ", args);
-		 * arguments = arguments + " " + SequenceNumber;
-		 * byte[] MessageArgs = ECDHKey.encrypt(arguments);
-		 * //secureSocket.sendMessage(MessageArgs);
-		 * connection.send(MessageArgs);
-		 * System.out.println("Sent: " + arguments + ", to the server!");
-		 *
-		 * System.out.println("banco enviou antes de eu sair: " + connection.receive());
-		 * } catch (Exception e) {
-		 *
-		 * }
-		 */
-		// remover depois pk isto e um mock
 
 		// Obter número de sequência do servidor
 		int sequenceNumber = getSequenceNumber(connection.receive(), ECDHKey);
