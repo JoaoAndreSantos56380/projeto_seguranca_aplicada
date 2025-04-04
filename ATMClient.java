@@ -30,6 +30,8 @@ public class ATMClient {
 	private static final boolean debug = true;
 	private static final int EXIT_FAILURE = 255;
 	private static final int EXIT_SUCCESS = 0;
+	private static final int PROTOCOL_ERROR = 63;
+	private static int ERROR;
 	private static final String SERVER_IP = "127.0.0.1";
 	private static final int SERVER_PORT = 3000;
 	private static final String DEFAULT_AUTH_FILE = "bank.auth"; // Shared auth file
@@ -47,9 +49,13 @@ public class ATMClient {
 	}
 
 	public ATMClient(String[] args) {
+
+		addShutdownHook();
+
 		Security.addProvider(new BouncyCastleProvider());
 		if (!isValidArgs(args)) {
-			cleanExit();
+			ERROR = EXIT_FAILURE;
+			System.exit(EXIT_FAILURE);
 		}
 
 		config = getConfigFromArgs(args);
@@ -68,7 +74,13 @@ public class ATMClient {
 		// Obter número de sequência do servidor
 		int sequenceNumber = getSequenceNumber(connection.receive(), ECDHKey);
 
-		Operation op = getOperation(args);
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        Operation op = getOperation(args);
+
 		// Gerar mensagem consoante args, com número de sequência
 		MessageWithSequenceNumber messageToEncrypt = new MessageWithSequenceNumber(new Message(account, op),
 				sequenceNumber+1);
@@ -78,8 +90,10 @@ public class ATMClient {
 		connection.send(encryptedMessage);
 		// Obter "OK" ou "NOK"
 		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
-		System.out.println(reply.status);
+		//System.out.println(reply.status);
+
 		// Exit
+		successfullExit("");
 		//System.out.println("leaving...");
 		// init(args);
 		// run(args);
@@ -128,6 +142,11 @@ public class ATMClient {
 		byte[] bytes = null;
 		try {
 			bytes = ECDHKey.decrypt(EncryptedMsg);
+			if (bytes == null) {
+				//Deserializacao do Seq num falhou
+				ERROR = EXIT_FAILURE;
+				System.exit(EXIT_FAILURE);
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -265,7 +284,8 @@ public class ATMClient {
 	 */
 	private boolean isValidAuthFile(String filename) {
 		if (filename == null || filename.isEmpty() || filename.length() > 127) {
-			cleanExit();
+			ERROR = EXIT_FAILURE;
+			System.exit(EXIT_FAILURE);
 		} else {
 			String filenameRegex = "^[\\-_\\.0-9a-z]+$";
 			Pattern pattern = Pattern.compile(filenameRegex);
@@ -289,7 +309,8 @@ public class ATMClient {
 	 */
 	private boolean isValidCardFile(String filename) {
 		if (filename == null || filename.isEmpty() || filename.length() > 127) {
-			cleanExit();
+			ERROR = EXIT_FAILURE;
+			System.exit(EXIT_FAILURE);
 		}
 		String filenameRegex = "^[\\-_\\.0-9a-z]+$";
 		Pattern pattern = Pattern.compile(filenameRegex);
@@ -323,7 +344,8 @@ public class ATMClient {
 	 */
 	private boolean isValidIp(String input) {
 		if (input == null || input.isEmpty() || input.length() > 16) {
-			cleanExit();
+			ERROR = EXIT_FAILURE;
+			System.exit(EXIT_FAILURE);
 			return false;
 		}
 
@@ -360,8 +382,6 @@ public class ATMClient {
 
 	private ATMConfig getConfigFromArgs(String[] args) {
 		config = new ATMConfig(DEFAULT_AUTH_FILE, SERVER_IP, SERVER_PORT);
-
-		addShutdownHook();
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-s")) {
@@ -459,9 +479,9 @@ public class ATMClient {
 		try {
 			Socket socket = new Socket(SERVER_IP, SERVER_PORT);
 			connection = new Connection(socket);
-			System.out.println("aqui");
 		} catch (Exception e) {
-			e.printStackTrace();
+			ERROR = PROTOCOL_ERROR;
+			System.exit(PROTOCOL_ERROR);
 		}
 		return connection;
 	}
@@ -635,19 +655,16 @@ public class ATMClient {
 	// enviar msg ao server de q este cliente fechou?
 	private void cleanExit() {
 		// printUsage();
-		if (secureSocket != null && secureSocket.isClosed()) {
+		if (secureSocket != null && !secureSocket.isClosed()) {
 			secureSocket.close();
 		}
-		System.out.println(EXIT_FAILURE);
-		System.exit(EXIT_FAILURE);
 	}
 
+	//this method will trigger the clean exit call
 	private void successfullExit(String json) {
-		if (secureSocket != null && secureSocket.isClosed()) {
-			secureSocket.close();
-		}
 		// print the operation
 		System.out.println(json);
+		ERROR = EXIT_SUCCESS;
 		System.exit(EXIT_SUCCESS);
 	}
 
@@ -673,9 +690,8 @@ public class ATMClient {
 
 	private void addShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			System.out.println("\nShutdown signal received. Cleaning up...");
 			cleanExit();
-			System.out.println("Shutdown complete.");
+			System.out.println(ERROR);
 		}));
 	}
 }

@@ -1,4 +1,6 @@
 import java.io.*;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.security.*;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -23,6 +25,8 @@ public class BankServer {
 	private static final String ARGS_PORT = "-p";
 	private static final int DEFAULT_PORT = 3000;
 	private static final int EXIT_FAILURE = 255;
+	private static final int PROTOCOL_ERROR = 63;
+	private static int ERROR;
 	private static final int EXIT_SUCCESS = 0;
 
 	// Attributes
@@ -38,10 +42,13 @@ public class BankServer {
 	}
 
 	public BankServer(String[] args) {
+
+		addShutdownHook();
+
 		Security.addProvider(new BouncyCastleProvider());
 		if (!isValidArgs(args)) {
-			System.out.println("255");
-			cleanExit();
+			ERROR = EXIT_FAILURE;
+			System.exit(EXIT_FAILURE);
 		}
 
 		config = getConfigFromArgs(args);
@@ -101,8 +108,8 @@ public class BankServer {
 	 */
 	private boolean isValidArgs(String[] args) {
 		if (args.length > 4) {
-			printUsage(debug);
-			return false;
+			ERROR = EXIT_FAILURE;
+			System.exit(EXIT_FAILURE);
 		}
 
 		for (int i = 0; i < args.length; i++) {
@@ -121,7 +128,7 @@ public class BankServer {
 					i++;
 				}
 			} else { // Invalid argument
-				printUsage(debug);
+				//printUsage(debug);
 			}
 		}
 
@@ -167,8 +174,6 @@ public class BankServer {
 		}
 
 		config = new ServerConfig(DEFAULT_AUTH_FILE, DEFAULT_PORT);
-
-		addShutdownHook();
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-s")) {
@@ -221,17 +226,18 @@ public class BankServer {
 					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
 					// Further processing (e.g., transaction handling) would follow here
 					ECDHAESEncryption ECDHKey = getAESKeyFromSharesSecret();
-
 					// Send Sequential Number
 					sendSequenctialNumber(ECDHKey);
+
+					//socket.setSoTimeout(10000);
+					//System.out.println("Setted timeout");
+
 					MessageWithSequenceNumber msgWithSeq = receiveMessage(ECDHKey);
 
 					processRequest(msgWithSeq);
 				} else {
 					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
 				}
-			} catch (Exception e) {
-				System.out.println("Error during handshake: " + e.getMessage());
 			} finally {
 				// fechar socket cliente
 				try {
@@ -242,7 +248,6 @@ public class BankServer {
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
-				// cleanExit();
 			}
 		}
 
@@ -469,8 +474,6 @@ public class BankServer {
 				e.printStackTrace();
 			}
 		}
-		System.out.println(EXIT_FAILURE);
-		System.exit(EXIT_FAILURE);
 	}
 
 	private void closeClientSocket(Socket socket) {
@@ -486,7 +489,7 @@ public class BankServer {
 
 	private String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
-			printUsage(debug);
+			//printUsage(debug);
 			cleanExit();
 		}
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
@@ -508,9 +511,8 @@ public class BankServer {
 
 	private void addShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			System.out.println("\nShutdown signal received. Cleaning up...");
 			cleanExit();
-			System.out.println("Shutdown complete.");
+			System.out.println(EXIT_FAILURE);
 		}));
 	}
 }
