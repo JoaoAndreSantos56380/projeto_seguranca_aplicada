@@ -469,6 +469,7 @@ public class BankServer {
 				e.printStackTrace();
 			}
 		}
+		System.out.println(EXIT_FAILURE);
 		System.exit(EXIT_FAILURE);
 	}
 
@@ -513,16 +514,3 @@ public class BankServer {
 		}));
 	}
 }
-	/*
-	 private void addShutdownHook() {
-	 	ServerShutdown shutdownThread = new ServerShutdown();
-	 		Runtime.getRuntime().addShutdownHook(shutdownThread);
-	 }
-
-	 class ServerShutdown extends Thread {
-	 	public void run() {
-	 	cleanExit();
-	 	}
-	 }
-
-}*/

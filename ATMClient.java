@@ -629,7 +629,7 @@ public class ATMClient {
 		System.out.println("  -n <balance>     : Create new account with balance amount (format: XX.XX)");
 		System.out.println("  -d <balance>     : Deposit balance amount (format: XX.XX)");
 		System.out.println("  -w <balance>     : Withdraw balance amount (format: XX.XX)");
-		System.out.println("  -g				 : Get balance amount (format: XX.XX)");
+		System.out.println("  -g			   : Get balance amount (format: XX.XX)");
 	}
 
 	// enviar msg ao server de q este cliente fechou?
@@ -638,6 +638,7 @@ public class ATMClient {
 		if (secureSocket != null && secureSocket.isClosed()) {
 			secureSocket.close();
 		}
+		System.out.println(EXIT_FAILURE);
 		System.exit(EXIT_FAILURE);
 	}
 
