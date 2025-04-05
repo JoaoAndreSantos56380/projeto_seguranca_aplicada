@@ -66,13 +66,13 @@ public class BankServer {
 			// serverSocket.setReuseAddress(true);
 			// serverSocket.bind(new InetSocketAddress(config.port));
 
-			System.out.println("Bank server listening on port " + config.port);
+			//System.out.println("Bank server listening on port " + config.port);
 			// Continuously accept client connections
 			// Socket clientSocket = serverSocket.accept();
 
 			while (!serverSocket.isClosed()) {
 				Socket clientSocket = serverSocket.accept();
-				System.out.println("Accepted connection from " + clientSocket.getInetAddress());
+				//System.out.println("Accepted connection from " + clientSocket.getInetAddress());
 				new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
 			}
 
@@ -212,8 +212,6 @@ public class BankServer {
 		 * This is called after validation
 		 */
 		public void run() {
-			// to be in scope of the finally block
-			String json = "ola";
 
 			try {
 				connection = new Connection(socket);
@@ -221,7 +219,7 @@ public class BankServer {
 				getClientPublicKey();
 				syncSessionKeys();
 				if (sharedSecret != null) {
-					System.out.println("Mutual authentication successful with " + socket.getInetAddress());
+					//System.out.println("Mutual authentication successful with " + socket.getInetAddress());
 					// Further processing (e.g., transaction handling) would follow here
 					ECDHAESEncryption ECDHKey = getAESKeyFromSharesSecret();
 					// Send Sequential Number
@@ -232,15 +230,20 @@ public class BankServer {
 
 					MessageWithSequenceNumber msgWithSeq = receiveMessage(ECDHKey);
 
-					processRequest(msgWithSeq);
+					try {
+						processRequest(msgWithSeq);
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+
 				} else {
-					System.out.println("Mutual authentication failed with " + socket.getInetAddress());
+					//System.out.println("Mutual authentication failed with " + socket.getInetAddress());
 				}
 			} finally {
 				// fechar socket cliente
 				try {
 					// secureSocket.sendMessage(json);
-					connection.send(json.getBytes());
+					//connection.send(json.getBytes());
 					socket.close();
 
 				} catch (Exception e) {
@@ -249,94 +252,91 @@ public class BankServer {
 			}
 		}
 
-		private void processRequest(MessageWithSequenceNumber msgWithSeq) {
+		private void processRequest(MessageWithSequenceNumber msgWithSeq) throws IOException {
+
 			Account currentAccount = null;
-			if(msgWithSeq != null){
-				if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
-					Reply reply = new Reply(Status.NOT_OK);
-					try {
-						connection.send(reply.toByteArray());
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
+
+			if (msgWithSeq != null && msgWithSeq.sequenceNumber == (sequenceNumber + 1)) {
+
+				Message m = msgWithSeq.message;
+				Operations op = m.operation.op;
+				boolean exists = false;
+				String outputReply = null;
+
+				// Verifica se já existe a conta
+				if (accounts.containsKey(m.account.name)) {
+					currentAccount = accounts.get(m.account.name);
+					exists = true;
 				} else {
-					if (msgWithSeq.message.operation.op == Operations.NEW_ACCOUNT) {
-						if (msgWithSeq.message.operation.balance < 10.0) {
-							Reply reply = new Reply(Status.NOT_OK);
-							try {
-								connection.send(reply.toByteArray());
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-						currentAccount = new Account(msgWithSeq.message.account.name,
-						msgWithSeq.message.account.PIN,
-						msgWithSeq.message.operation.balance);
-						accounts.put(msgWithSeq.message.account.name,currentAccount);
-						String outputReply = currentAccount.toJson(msgWithSeq.message.operation.op, msgWithSeq.message.operation.balance);
-						try {
-							connection.send(new Reply(Status.OK, outputReply).toByteArray());
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-					} else if (msgWithSeq.message.operation.op == Operations.DEPOSIT) {
-						if (msgWithSeq.message.operation.balance > accounts.get(msgWithSeq.message.account.name).getBalance()) {
-							Reply reply = new Reply(Status.NOT_OK);
-							try {
-								connection.send(reply.toByteArray());
-								return;
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-						if (msgWithSeq.message.account.PIN != accounts.get(msgWithSeq.message.account.name).getPin()) {
-							Reply reply = new Reply(Status.NOT_OK);
-							try {
-								connection.send(reply.toByteArray());
-								return;
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
+					currentAccount = new Account(m.account.name);
+					//accounts.put(m.account.name, currentAccount);
+				}
 
-						Account clientAccount = accounts.get(msgWithSeq.message.account.name);
-						clientAccount.subBalance(msgWithSeq.message.operation.balance);
-						accounts.put(msgWithSeq.message.account.name, clientAccount);
-					} else if (msgWithSeq.message.operation.op == Operations.DEPOSIT) {
-						if (msgWithSeq.message.account.PIN != accounts.get(msgWithSeq.message.account.name).getPin()) {
-							Reply reply = new Reply(Status.NOT_OK);
-							try {
-								connection.send(reply.toByteArray());
-								return;
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-						Account clientAccount = accounts.get(msgWithSeq.message.account.name);
-						clientAccount.addBalance(msgWithSeq.message.operation.balance);
-						accounts.put(msgWithSeq.message.account.name, clientAccount);
+				switch (op) {
 
-					} else if (msgWithSeq.message.operation.op == Operations.GET) {
-						if (msgWithSeq.message.account.PIN != accounts.get(msgWithSeq.message.account.name).getPin()) {
-							Reply reply = new Reply(Status.NOT_OK);
-							try {
-								connection.send(reply.toByteArray());
-								return;
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-						double accountBalance = accounts.get(msgWithSeq.message.account.name).getBalance();
-						Reply reply = new Reply(Status.OK, accountBalance);
-						try {
+					case NEW_ACCOUNT:
+						//caso ja exista a conta nao se pode criar novamente
+						if (m.operation.balance < 10.0 || exists) {
+							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
 							connection.send(reply.toByteArray());
-						} catch (IOException e) {
-							e.printStackTrace();
+							return;
+						} else {
+							currentAccount.setBalance(m.operation.balance);
+							currentAccount.setPin(m.account.PIN);
+							//so queremos que ele coloque a conta no accounts caso seja uma operacao de new account
+							if (exists) {
+								accounts.replace(m.account.name, currentAccount);
+							} else { accounts.put(m.account.name, currentAccount); }
+							outputReply = currentAccount.toJson(m.operation.op, currentAccount.getBalance());
+							connection.send(new Reply(Status.OK, outputReply).toByteArray());
 						}
-					}
+						break;
+
+					case WITHDRAW:
+						if (currentAccount.getBalance() == 0.0 || !Arrays.equals(m.account.PIN, currentAccount.getPin()) || m.operation.balance > currentAccount.getBalance()) {
+							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
+							connection.send(reply.toByteArray());
+							return;
+
+						} else {
+							currentAccount.subBalance(m.operation.balance);
+							accounts.replace(m.account.name, currentAccount);
+							outputReply = currentAccount.toJson(m.operation.op, m.operation.balance);
+							connection.send(new Reply(Status.OK, outputReply).toByteArray());
+						}
+						break;
+
+					case DEPOSIT:
+						if (!Arrays.equals(m.account.PIN, currentAccount.getPin())) {
+							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
+								connection.send(reply.toByteArray());
+								return;
+						} else {
+							currentAccount.addBalance(m.operation.balance);
+							accounts.replace(m.account.name, currentAccount);
+							outputReply = currentAccount.toJson(m.operation.op, m.operation.balance);
+							connection.send(new Reply(Status.OK, outputReply).toByteArray());
+						}
+						break;
+
+					case GET:
+						if (!Arrays.equals(m.account.PIN, currentAccount.getPin())) {
+							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
+							connection.send(reply.toByteArray());
+							return;
+						} else {
+							outputReply = currentAccount.toJson(m.operation.op,currentAccount.getBalance());
+							connection.send(new Reply(Status.OK, outputReply).toByteArray());
+						}
+						break;
+
+					default:
+						Reply unknownReply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
+						connection.send(unknownReply.toByteArray());
+						return;
 				}
 			} else {
-				Reply reply = new Reply(Status.NOT_OK);
+				Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
 				try {
 					connection.send(reply.toByteArray());
 				} catch (IOException e) {
@@ -344,6 +344,8 @@ public class BankServer {
 				}
 			}
 		}
+
+
 
 		private MessageWithSequenceNumber receiveMessage(ECDHAESEncryption ECDHKey) {
 			byte[] bytes = connection.receive();
@@ -359,7 +361,7 @@ public class BankServer {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			System.out.println(sequenceNumber);
+			//System.out.println(sequenceNumber);
 			connection.send(EncryptedMessageSend);
 		}
 
@@ -389,18 +391,18 @@ public class BankServer {
 				// Send the ECDH public key and its RSA signature.
 				connection.send(ecdhPubKeyEncoded);
 				connection.send(signature);
-				System.out.println("Sent ECDH public key and RSA signature.");
+				//System.out.println("Sent ECDH public key and RSA signature.");
 
 				// Receive the client's ECDH public key and RSA signature.
 				byte[] clientEcdhPubKeyEncoded = connection.receive(); // (byte[]) ois.readObject();
 				byte[] clientSignature = connection.receive(); // (byte[]) ois.readObject();
-				System.out.println("Received client's ECDH public key and RSA signature.");
+				//System.out.println("Received client's ECDH public key and RSA signature.");
 
 				// Verify the client's signature using the client's RSA public key.
 				if (!RSAKeyUtils.verifySignature(clientEcdhPubKeyEncoded, clientSignature, atmPublicKey)) {
 					throw new SecurityException("Client's RSA signature verification failed!");
 				}
-				System.out.println("Client's RSA signature verified.");
+				//System.out.println("Client's RSA signature verified.");
 
 				// Reconstruct the client's ECDH public key.
 				KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
@@ -416,7 +418,7 @@ public class BankServer {
 				e.printStackTrace();
 			}
 
-			System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
+			//System.out.println("Server computed shared secret: " + Arrays.toString(sharedSecret));
 		}
 
 		private void getClientPublicKey() {

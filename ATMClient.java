@@ -31,7 +31,7 @@ public class ATMClient {
 	private static final int EXIT_FAILURE = 255;
 	private static final int EXIT_SUCCESS = 0;
 	private static final int PROTOCOL_ERROR = 63;
-	private static int ERROR;
+	private static int ERROR = EXIT_FAILURE;
 	private static final String SERVER_IP = "127.0.0.1";
 	private static final int SERVER_PORT = 3000;
 	private static final String DEFAULT_AUTH_FILE = "bank.auth"; // Shared auth file
@@ -73,32 +73,33 @@ public class ATMClient {
 
 		// Obter número de sequência do servidor
 		int sequenceNumber = getSequenceNumber(connection.receive(), ECDHKey);
-
+		/*
         try {
             Thread.sleep(100);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
-        }
+        }*/
         Operation op = getOperation(args);
 
 		// Gerar mensagem consoante args, com número de sequência
 		MessageWithSequenceNumber messageToEncrypt = new MessageWithSequenceNumber(new Message(account, op),
-				sequenceNumber+1);
+				sequenceNumber + 1);
 		// Encriptar mensagem com chave de sessão
 		byte[] encryptedMessage = encryptMessage(messageToEncrypt, ECDHKey);
 		// Enviar mensagem encriptada
 		connection.send(encryptedMessage);
 		// Obter "OK" ou "NOK"
 		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
-		//System.out.println(reply.status);
 
-		//TODO IMPRIMIR JSON NO CLIENTE
 
-		// Exit
-		successfullExit("");
-		//System.out.println("leaving...");
-		// init(args);
-		// run(args);
+		if (reply != null && reply.status == Status.OK) {
+			successfullExit(reply.output);
+		} else {
+			System.exit(ERROR = EXIT_FAILURE);
+		}
+
+
+
 	}
 
 	private byte[] encryptMessage(MessageWithSequenceNumber messageToEncrypt, ECDHAESEncryption ECDHKey) {
@@ -124,7 +125,7 @@ public class ATMClient {
 				String balance = extractArg("-w", i, args);
 				return new Operation(Operations.WITHDRAW, Double.parseDouble(balance));
 			} else if (args[i].startsWith("-g")) {
-				return new Operation(Operations.NEW_ACCOUNT, -1);
+				return new Operation(Operations.GET, 0);
 			}
 		}
 		return null;
@@ -528,19 +529,19 @@ public class ATMClient {
 			// Receive the server's ECDH public key and RSA signature.
 			byte[] serverEcdhPubKeyEncoded = connection.receive(); // (byte[]) ois.readObject();
 			byte[] serverSignature = connection.receive(); // (byte[]) ois.readObject();
-			System.out.println("Received server's ECDH public key and RSA signature.");
+			//System.out.println("Received server's ECDH public key and RSA signature.");
 
 			// Verify the server's signature using the server's RSA public key.
 			if (!RSAKeyUtils.verifySignature(serverEcdhPubKeyEncoded, serverSignature, bankPublicKey)) {
 				connection.close();// secureSocket.socket.close(); // socket.close();
 				throw new SecurityException("Server's RSA signature verification failed!");
 			}
-			System.out.println("Server's RSA signature verified.");
+			//System.out.println("Server's RSA signature verified.");
 
 			// Send the client's ECDH public key and RSA signature.
 			connection.send(ecdhPubKeyEncoded); // oos.writeObject(ecdhPubKeyEncoded);
 			connection.send(signature);// oos.writeObject(signature);
-			System.out.println("Sent client's ECDH public key and RSA signature.");
+			//System.out.println("Sent client's ECDH public key and RSA signature.");
 
 			// Reconstruct the server's ECDH public key.
 			KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
@@ -552,7 +553,7 @@ public class ATMClient {
 			keyAgree.init(ecdhKeyPair.getPrivate());
 			keyAgree.doPhase(serverEcdhPubKey, true);
 			sharedSecret = keyAgree.generateSecret();
-			System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
+			//System.out.println("Client computed shared secret: " + Arrays.toString(sharedSecret));
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -606,7 +607,7 @@ public class ATMClient {
 
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-n")) {
-				System.out.println(extractArg("-n", i, args));
+				//System.out.println(extractArg("-n", i, args));
 				balance = Double.parseDouble(extractArg("-n", i, args));
 				if (args[i].equals("-n")) {
 					i++;
@@ -666,8 +667,7 @@ public class ATMClient {
 	private void successfullExit(String json) {
 		// print the operation
 		System.out.println(json);
-		ERROR = EXIT_SUCCESS;
-		System.exit(EXIT_SUCCESS);
+		System.exit(ERROR = EXIT_SUCCESS);
 	}
 
 	private class ATMConfig {
@@ -693,7 +693,7 @@ public class ATMClient {
 	private void addShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			cleanExit();
-			System.out.println(ERROR);
+			//System.out.println(ERROR);
 		}));
 	}
 }
