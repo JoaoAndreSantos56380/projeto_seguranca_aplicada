@@ -1,9 +1,7 @@
 import java.io.IOException;
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.io.File;
@@ -53,12 +51,15 @@ public class ATMClient {
 		addShutdownHook();
 
 		Security.addProvider(new BouncyCastleProvider());
-		if (!isValidArgs(args)) {
+
+		String[] tokens = tokenizeArgs(args);
+
+		if (!isValidArgs(tokens)) {
 			System.exit(ERROR = EXIT_FAILURE);
 		}
 
-		config = getConfigFromArgs(args);
-		account = getAccount(args);
+		config = getConfigFromArgs(tokens);
+		account = getAccount(tokens);
 		Connection connection = getServerConnection();
 
 		KeyPair atmKeyPair = generateKeyPair();
@@ -78,7 +79,7 @@ public class ATMClient {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }*/
-        Operation op = getOperation(args);
+        Operation op = getOperation(tokens);
 
 		// Gerar mensagem consoante args, com número de sequência
 		MessageWithSequenceNumber messageToEncrypt = new MessageWithSequenceNumber(new Message(account, op),
@@ -96,8 +97,6 @@ public class ATMClient {
 		} else {
 			System.exit(ERROR = EXIT_FAILURE);
 		}
-
-
 
 	}
 
@@ -161,13 +160,15 @@ public class ATMClient {
 		return atmPublicKeyEncrypted;
 	}
 
-	private boolean isValidArgs(String[] args) {
+	private boolean isValidArgs(String[] tokens) {
+
 		// requires -a ACCOUNT -OPERATION
-		if (args.length < 3 || args.length > 12) {
+		if (tokens.length < 3 || tokens.length > 12) {
 			if (verbose)
 				printUsage();
 			return false;
 		}
+
 		// Set to track duplicate arguments
 		Set<String> usedArgs = new HashSet<>();
 		Set<String> validArgs = Set.of("-s", "-i", "-p", "-c", "-a", "-n", "-d", "-w", "-g");
@@ -175,67 +176,67 @@ public class ATMClient {
 		boolean isValid = false;
 		int opCount = 0;
 
-		for (int i = 0; i < args.length; i++) {
+		for (int i = 0; i < tokens.length; i++) {
 
 			// Check for duplicate argument of the same type
-			if (usedArgs.contains(args[i])) {
+			if (usedArgs.contains(tokens[i])) {
 				return false;
 			}
 			//check for 2 of the same Op
-			if (validOps.contains(args[i])) {
+			if (validOps.contains(tokens[i])) {
 				opCount++;
 				if (opCount > 1) return false;
 			}
 
-			if (args[i].startsWith("-s")) {
-				String authFilePath = extractArg("-s", i, args);
+			if (tokens[i].startsWith("-s")) {
+				String authFilePath = extractArg("-s", i, tokens);
 
 				if (authFilePath == null || !isValidAuthFile(authFilePath))
 					return false;
-			} else if (args[i].startsWith("-i")) {
-				String ipAddress = extractArg("-i", i, args);
+			} else if (tokens[i].startsWith("-i")) {
+				String ipAddress = extractArg("-i", i, tokens);
 
 				if (ipAddress == null || !isValidIp(ipAddress))
 					return false;
-			} else if (args[i].startsWith("-p")) {
-				String port = extractArg("-p", i, args);
+			} else if (tokens[i].startsWith("-p")) {
+				String port = extractArg("-p", i, tokens);
 
 				if (port == null || !isValidPort(port))
 					return false;
-			} else if (args[i].startsWith("-c")) {
-				String cardFilePath = extractArg("-c", i, args);
+			} else if (tokens[i].startsWith("-c")) {
+				String cardFilePath = extractArg("-c", i, tokens);
 
 				if (cardFilePath == null || !isValidCardFile(cardFilePath))
 					return false;
-			} else if (args[i].startsWith("-a")) {
-				String account = extractArg("-a", i, args);
+			} else if (tokens[i].startsWith("-a")) {
+				String account = extractArg("-a", i, tokens);
 
 				if (account == null || !isValidAccount(account)) {
 					return false;
 				} else isValid = true;
-			} else if (args[i].startsWith("-n")) {
-				String balance = extractArg("-n", i, args);
+			} else if (tokens[i].startsWith("-n")) {
+				String balance = extractArg("-n", i, tokens);
 
 				if (balance == null || !isValidBalance(balance))
 					return false;
-			} else if (args[i].startsWith("-d")) {
-				String balance = extractArg("-d", i, args);
+			} else if (tokens[i].startsWith("-d")) {
+				String balance = extractArg("-d", i, tokens);
 
 				if (balance == null || !isValidBalance(balance))
 					return false;
-			} else if (args[i].startsWith("-w")) {
-				String balance = extractArg("-w", i, args);
+			} else if (tokens[i].startsWith("-w")) {
+				String balance = extractArg("-w", i, tokens);
 
 				if (balance == null || !isValidBalance(balance))
 					return false;
-			} else if (args[i].startsWith("-g")) {
+			} else if (tokens[i].startsWith("-g")) {
 				continue;
 			}
 
-			if (!validArgs.contains(args[i])) {
+			if (!validArgs.contains(tokens[i])) {
 				return false;
 			} else {
-				usedArgs.add(args[i]);
+				usedArgs.add(tokens[i]);
 				i++;
 			}
 		}
@@ -553,86 +554,54 @@ public class ATMClient {
 		}
 	}
 
-	/*
-	 * private void init(String[] args) {
-	 * try {
-	 * Security.addProvider(new BouncyCastleProvider());
-	 * KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-	 * keyGen.init(128);
-	 * SecretKey secretKey = keyGen.generateKey();
-	 *
-	 * FileUtils.saveClientPIN(secretKey, "card.file");
-	 * // Load the shared secret key from the auth file.
-	 * PublicKey bankPublicKey = FileUtils.readPublicKey(DEFAULT_AUTH_FILE);
-	 * Socket socket = new Socket(SERVER_IP, SERVER_PORT);
-	 *
-	 * if (socket.isClosed() || !socket.isConnected()) {
-	 * System.out.println("ERROR: socket is not connected");
-	 * cleanExit();
-	 * }
-	 *
-	 * secureSocket = new SecureSocket(socket, bankPublicKey, atmKeyPair);
-	 * if (syncSessionKeys(secureSocket)) {
-	 * System.out.println("Mutual authentication successful!");
-	 * // Further processing after authentication can follow here.
-	 * ECDHAESEncryption ECDHKey = new ECDHAESEncryption(sharedSecret);
-	 * } else {
-	 * System.out.println("Mutual authentication failed!");
-	 * }
-	 * } catch (Exception e) {
-	 * e.printStackTrace();
-	 * }
-	 *
-	 * // run(args);
-	 * try {
-	 * String json = secureSocket.receiveStringMessage();
-	 * successfullExit(json);
-	 * } catch (Exception e) {
-	 * cleanExit();
-	 * }
-	 * }
-	 */
+	private String[] tokenizeArgs(String[] args) {
+		List<String> tokens = new ArrayList<>();
 
-	private void run(String[] args) {
+		for (String arg : args) {
+			int i = 0;
+			while (i < arg.length()) {
+				if (arg.charAt(i) == '-') {
+					// Encontrou o ex. -
+					if (i + 1 < arg.length()) {
+						//ir buscar a flag ex. a
+						char flag = arg.charAt(i + 1);
+						//guardar a flag ex. -a
+						String flagStr = "-" + flag;
+						//inc em 2 porque -a tem tamanho 2
+						i += 2;
 
-		// TROCAR PARA INT * 100
-		// int balance;
-		double balance = 0;
-
-		for (int i = 0; i < args.length; i++) {
-			if (args[i].startsWith("-n")) {
-				//System.out.println(extractArg("-n", i, args));
-				balance = Double.parseDouble(extractArg("-n", i, args));
-				if (args[i].equals("-n")) {
-					i++;
+						// Captura o valor imediatamente após a flag
+						StringBuilder value = new StringBuilder();
+						while (i < arg.length() && arg.charAt(i) != '-') {
+							//criar string que vai do ]-a ate -[
+							value.append(arg.charAt(i));
+							i++;
+						}
+						//adicionar a lista
+						tokens.add(flagStr);
+						if (!value.isEmpty()) {
+							tokens.add(value.toString());
+						}
+					} else {
+						// o arg eh apenas -
+						//salta
+						i++;
+					}
+				} else {
+					// Caso não seja o "-", talvez já seja o argumento separado
+					StringBuilder value = new StringBuilder();
+					while (i < arg.length() && arg.charAt(i) != '-') {
+						value.append(arg.charAt(i));
+						i++;
+					}
+					tokens.add(value.toString());
 				}
-				createAccount(balance);
-				return;
-			} else if (args[i].startsWith("-d")) {
-				// balance = Integer.parseInt(extractArg("-d", i, args));
-				balance = Double.parseDouble(extractArg("-d", i, args));
-				if (args[i].equals("-d")) {
-					i++;
-				}
-				// deposit(balance);
-				return;
-			} else if (args[i].startsWith("-w")) {
-				balance = Double.parseDouble(extractArg("-w", i, args));
-				if (args[i].equals("-w")) {
-					i++;
-				}
-				// withdraw(balance);
-				return;
-			} else if (args[i].startsWith("-g")) {
-				// get();
-				return;
 			}
 		}
+
+		return tokens.toArray(new String[0]);
 	}
 
-	private void createAccount(double balance) {
-
-	}
 
 	private void printUsage() {
 		System.out.println("Usage: ATMClient [-s <auth-file>] [-i <ip-address>] [-p <port>]");
