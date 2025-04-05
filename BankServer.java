@@ -1,6 +1,8 @@
 import java.io.*;
 import java.security.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -26,7 +28,7 @@ public class BankServer {
 	private static final int PROTOCOL_ERROR = 63;
 	private static final int EXIT_SUCCESS = 0;
 	private static int ERROR = EXIT_SUCCESS;
-
+	private static ExecutorService threadPool = Executors.newCachedThreadPool();
 
 	// Attributes
 	private ServerConfig config;
@@ -62,15 +64,20 @@ public class BankServer {
 		try {
 			// eh siupsoto aceitarmos apenas de um porto??
 			serverSocket = new ServerSocket(config.port);
-
 			//System.out.println("Bank server listening on port " + config.port);
 			// Continuously accept client connections
 			// Socket clientSocket = serverSocket.accept();
 
 			while (!serverSocket.isClosed()) {
 				Socket clientSocket = serverSocket.accept();
-				//System.out.println("Accepted connection from " + clientSocket.getInetAddress());
-				new Thread(new ConnectionHandler(clientSocket, rsaKeyPair)).start();
+				String clientIP = clientSocket.getInetAddress().getHostAddress();
+				int clientPort = clientSocket.getPort();
+				if (TrafficMonitor.isSuspicious(clientIP+":"+clientPort)) {
+					System.out.println("IP " + clientIP+":"+clientPort + " made a big amount of requests, blocking...");
+					clientSocket.close(); 
+				} else {
+					threadPool.submit(new ConnectionHandler(clientSocket, rsaKeyPair));
+				}
 			}
 
 		} catch (Exception e) {
