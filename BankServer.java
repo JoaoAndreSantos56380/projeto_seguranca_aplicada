@@ -249,19 +249,19 @@ public class BankServer {
 
 			Account currentAccount = null;
 
-			if (msgWithSeq != null && msgWithSeq.message.operation != null && msgWithSeq.message.operation.op != null && msgWithSeq.sequenceNumber == (sequenceNumber + 1)) {
+			if (msgWithSeq != null && msgWithSeq.getMessage().getOperation() != null && msgWithSeq.getMessage().getOperation().getOp() != null && msgWithSeq.getSequenceNumber() == (sequenceNumber + 1)) {
 
-				Message m = msgWithSeq.message;
-				Operations op = m.operation.op;
+				Message m = msgWithSeq.getMessage();
+				Operations op = m.getOperation().getOp();
 				boolean exists = false;
 				String outputReply = null;
 
 				// Verifica se já existe a conta
-				if (accounts.containsKey(m.account.name)) {
-					currentAccount = accounts.get(m.account.name);
+				if (accounts.containsKey(m.getAccount().name)) {
+					currentAccount = accounts.get(m.getAccount().name);
 					exists = true;
 				} else {
-					currentAccount = new Account(m.account.name);
+					currentAccount = new Account(m.getAccount().name);
 					//accounts.put(m.account.name, currentAccount);
 				}
 
@@ -269,56 +269,56 @@ public class BankServer {
 
 					case NEW_ACCOUNT:
 						//caso ja exista a conta nao se pode criar novamente
-						if (m.operation.balance < 10.0 || exists) {
+						if (m.getOperation().getBalance() < 10.0 || exists) {
 							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
 							connection.send(reply.toByteArray());
 							return;
 						} else {
-							currentAccount.setBalance(m.operation.balance);
-							currentAccount.setPin(m.account.PIN);
+							currentAccount.setBalance(m.getOperation().getBalance());
+							currentAccount.setPin(m.getAccount().PIN);
 							//so queremos que ele coloque a conta no accounts caso seja uma operacao de new account
 							if (exists) {
-								accounts.replace(m.account.name, currentAccount);
-							} else { accounts.put(m.account.name, currentAccount); }
-							outputReply = currentAccount.toJson(m.operation.op, currentAccount.getBalance());
+								accounts.replace(m.getAccount().name, currentAccount);
+							} else { accounts.put(m.getAccount().name, currentAccount); }
+							outputReply = currentAccount.toJson(m.getOperation().getOp(), currentAccount.getBalance());
 							connection.send(new Reply(Status.OK, outputReply).toByteArray());
 						}
 						break;
 
 					case WITHDRAW:
-						if (currentAccount.getBalance() == 0.0 || !Arrays.equals(m.account.PIN, currentAccount.getPin()) || m.operation.balance > currentAccount.getBalance()) {
+						if (currentAccount.getBalance() == 0.0 || !Arrays.equals(m.getAccount().PIN, currentAccount.getPin()) || m.getOperation().getBalance() > currentAccount.getBalance()) {
 							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
 							connection.send(reply.toByteArray());
 							return;
 
 						} else {
-							currentAccount.subBalance(m.operation.balance);
-							accounts.replace(m.account.name, currentAccount);
-							outputReply = currentAccount.toJson(m.operation.op, m.operation.balance);
+							currentAccount.subBalance(m.getOperation().getBalance());
+							accounts.replace(m.getAccount().name, currentAccount);
+							outputReply = currentAccount.toJson(m.getOperation().getOp(), m.getOperation().getBalance());
 							connection.send(new Reply(Status.OK, outputReply).toByteArray());
 						}
 						break;
 
 					case DEPOSIT:
-						if (!Arrays.equals(m.account.PIN, currentAccount.getPin())) {
+						if (!Arrays.equals(m.getAccount().PIN, currentAccount.getPin())) {
 							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
 								connection.send(reply.toByteArray());
 								return;
 						} else {
-							currentAccount.addBalance(m.operation.balance);
-							accounts.replace(m.account.name, currentAccount);
-							outputReply = currentAccount.toJson(m.operation.op, m.operation.balance);
+							currentAccount.addBalance(m.getOperation().getBalance());
+							accounts.replace(m.getAccount().name, currentAccount);
+							outputReply = currentAccount.toJson(m.getOperation().getOp(), m.getOperation().getBalance());
 							connection.send(new Reply(Status.OK, outputReply).toByteArray());
 						}
 						break;
 
 					case GET:
-						if (!Arrays.equals(m.account.PIN, currentAccount.getPin())) {
+						if (!Arrays.equals(m.getAccount().PIN, currentAccount.getPin())) {
 							Reply reply = new Reply(Status.NOT_OK, String.valueOf(EXIT_FAILURE));
 							connection.send(reply.toByteArray());
 							return;
 						} else {
-							outputReply = currentAccount.toJson(m.operation.op,currentAccount.getBalance());
+							outputReply = currentAccount.toJson(m.getOperation().getOp(),currentAccount.getBalance());
 							connection.send(new Reply(Status.OK, outputReply).toByteArray());
 						}
 						break;

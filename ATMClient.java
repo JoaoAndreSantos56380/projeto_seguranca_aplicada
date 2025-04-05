@@ -92,8 +92,8 @@ public class ATMClient {
 		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
 
 
-		if (reply != null && reply.status == Status.OK) {
-			successfullExit(reply.output);
+		if (reply != null && reply.getStatus() == Status.OK) {
+			successfullExit(reply.getOutput());
 		} else {
 			System.exit(ERROR = EXIT_FAILURE);
 		}

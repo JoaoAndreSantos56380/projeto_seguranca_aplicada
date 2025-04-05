@@ -5,12 +5,20 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 public class MessageWithSequenceNumber implements Serializable {
-	Message message;
-	int sequenceNumber;
+	private Message message;
+	private int sequenceNumber;
 
 	public MessageWithSequenceNumber(Message message, int sequenceNumber) {
 		this.message = message;
 		this.sequenceNumber = sequenceNumber;
+	}
+
+	public Message getMessage() {
+		return message;
+	}
+	
+	public int getSequenceNumber() {
+		return sequenceNumber;
 	}
 
 	public byte[] toByteArray() {

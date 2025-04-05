@@ -6,11 +6,23 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 public class Reply implements Serializable{
-	Status status;
+	private Status status;
 
-	double balance;
+	private double balance;
 
-	String output;
+	private String output;
+
+	public Status getStatus(){
+		return status;
+	}
+
+	public double getBalance(){
+		return balance;
+	}
+
+	public String getOutput(){
+		return output;
+	}
 
 	public Reply(Status status, double balance) {
 		this.status = status;
