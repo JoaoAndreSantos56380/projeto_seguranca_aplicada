@@ -40,6 +40,10 @@ public class Account {
 		return this.pin;
 	}
 
+    public void setPin (byte[] pin){
+        this.pin = pin;
+    }
+
     public String toJson(Operations operation, double amount) {
         StringBuilder json = new StringBuilder("{\"account\":\"");
         json.append(name).append("\",");
