@@ -24,8 +24,9 @@ public class BankServer {
 	private static final int DEFAULT_PORT = 3000;
 	private static final int EXIT_FAILURE = 255;
 	private static final int PROTOCOL_ERROR = 63;
-	private static int ERROR;
 	private static final int EXIT_SUCCESS = 0;
+	private static int ERROR = EXIT_SUCCESS;
+
 
 	// Attributes
 	private ServerConfig config;
@@ -73,7 +74,7 @@ public class BankServer {
 			}
 
 		} catch (Exception e) {
-			cleanExit();
+			System.exit(ERROR);
 		}
 	}
 
@@ -227,11 +228,9 @@ public class BankServer {
 					try {
 						processRequest(msgWithSeq);
 					} catch (IOException e) {
-						e.printStackTrace();
+						//System.exit(ERROR = EXIT_FAILURE);
 					}
 
-				} else {
-					//System.out.println("Mutual authentication failed with " + socket.getInetAddress());
 				}
 			} finally {
 				// fechar socket cliente
@@ -241,7 +240,7 @@ public class BankServer {
 					socket.close();
 
 				} catch (Exception e) {
-					e.printStackTrace();
+					//e.printStackTrace();
 				}
 			}
 		}
@@ -250,7 +249,7 @@ public class BankServer {
 
 			Account currentAccount = null;
 
-			if (msgWithSeq != null && msgWithSeq.sequenceNumber == (sequenceNumber + 1)) {
+			if (msgWithSeq != null && msgWithSeq.message.operation != null && msgWithSeq.message.operation.op != null && msgWithSeq.sequenceNumber == (sequenceNumber + 1)) {
 
 				Message m = msgWithSeq.message;
 				Operations op = m.operation.op;
@@ -352,7 +351,6 @@ public class BankServer {
 				EncryptedMessageSend = ECDHKey.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber+1).array());
 				sequenceNumber++;
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			//System.out.println(sequenceNumber);
@@ -451,30 +449,21 @@ public class BankServer {
 	}
 
 	private void cleanExit() {
-		//printUsage(debug);
 		if (serverSocket != null && !serverSocket.isClosed()) {
 			try {
 				serverSocket.close();
-				File file = new File(DEFAULT_AUTH_FILE);
-				if (file.exists()) {
-					file.delete();
+				//File file = new File(DEFAULT_AUTH_FILE);
+				File rootDir = new File(".");
+				File[] files = rootDir.listFiles();
+				//System.out.println(Arrays.toString(files));
+				if (files != null) {
+					for (File file : files) {
+						//CUIDADO AQUI
+						if (file.isFile() && (file.getName().endsWith(".card") || file.getName().endsWith(".auth"))) {
+							file.delete();
+						}
+					}
 				}
-				// TIRARARRR
-				File file2 = new File("card.file");
-				if (file2.exists()) {
-					file2.delete();
-				}
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
-	private void closeClientSocket(Socket socket) {
-
-		if (serverSocket != null && !serverSocket.isClosed() && socket != null && !socket.isClosed()) {
-			try {
-				socket.close();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -482,9 +471,7 @@ public class BankServer {
 	}
 
 	private String extractArg(String option, int i, String[] args) {
-		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
-			//printUsage(debug);
-			cleanExit();
+		if (args[i].equals(option) && i + 1 >= args.length) { return null;
 		}
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
@@ -506,7 +493,7 @@ public class BankServer {
 	private void addShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 			cleanExit();
-			System.out.println(EXIT_FAILURE);
+			System.out.println(ERROR);
 		}));
 	}
 }

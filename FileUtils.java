@@ -39,7 +39,7 @@ public class FileUtils {
 			KeyFactory keyFactory = KeyFactory.getInstance("RSA");
 			pk = keyFactory.generatePublic(spec);
 		} catch (Exception e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 		return pk;
 	}
