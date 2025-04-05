@@ -40,7 +40,6 @@ public class Reply implements Serializable{
 				ObjectInputStream ois = new ObjectInputStream(bis)) {
 			return ois.readObject();
 		} catch (IOException | ClassNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 			return null;
 		}

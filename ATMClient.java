@@ -92,6 +92,8 @@ public class ATMClient {
 		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
 		//System.out.println(reply.status);
 
+		//TODO IMPRIMIR JSON NO CLIENTE
+
 		// Exit
 		successfullExit("");
 		//System.out.println("leaving...");

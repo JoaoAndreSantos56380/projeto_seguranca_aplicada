@@ -22,10 +22,6 @@ public class Account {
 
     public String getName (){ return this.name; }
 
-    /* public void setCardFile (String cardFile){
-        this.cardFile = cardFile;
-    } */
-
     public void setBalance (double value){
         this.balance = value;
     }
@@ -40,9 +36,9 @@ public class Account {
 
     public double getBalance (){ return this.balance; }
 
-    /* public boolean verifyAccount() {
-        return this.name != null && this.cardFile != null && this.balance != null;
-    } */
+	public byte[] getPin(){
+		return this.pin;
+	}
 
     public String toJson(Operations operation, double amount) {
         StringBuilder json = new StringBuilder("{\"account\":\"");
