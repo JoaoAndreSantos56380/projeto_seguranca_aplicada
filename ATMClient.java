@@ -54,8 +54,7 @@ public class ATMClient {
 
 		Security.addProvider(new BouncyCastleProvider());
 		if (!isValidArgs(args)) {
-			ERROR = EXIT_FAILURE;
-			System.exit(EXIT_FAILURE);
+			System.exit(ERROR = EXIT_FAILURE);
 		}
 
 		config = getConfigFromArgs(args);
@@ -170,90 +169,74 @@ public class ATMClient {
 		}
 		// Set to track duplicate arguments
 		Set<String> usedArgs = new HashSet<>();
+		Set<String> validArgs = Set.of("-s", "-i", "-p", "-c", "-a", "-n", "-d", "-w", "-g");
+		boolean isValid = false;
 
 		for (int i = 0; i < args.length; i++) {
 
 			// Check for duplicate argument
 			if (usedArgs.contains(args[i])) {
-				if (verbose)
-					System.out.println("Error: Duplicate argument " + args[i]);
 				return false;
 			}
 
 			if (args[i].startsWith("-s")) {
 				String authFilePath = extractArg("-s", i, args);
+
 				if (authFilePath == null || !isValidAuthFile(authFilePath))
 					return false;
-				if (args[i].equals("-s")) {
-					i++;
-				}
 			} else if (args[i].startsWith("-i")) {
 				String ipAddress = extractArg("-i", i, args);
+
 				if (ipAddress == null || !isValidIp(ipAddress))
 					return false;
-				if (args[i].equals("-i")) {
-					i++;
-				}
 			} else if (args[i].startsWith("-p")) {
 				String port = extractArg("-p", i, args);
+
 				if (port == null || !isValidPort(port))
 					return false;
-				if (args[i].equals("-p")) {
-					i++;
-				}
 			} else if (args[i].startsWith("-c")) {
 				String cardFilePath = extractArg("-c", i, args);
+
 				if (cardFilePath == null || !isValidCardFile(cardFilePath))
 					return false;
-				if (args[i].equals("-c")) {
-					i++;
-				}
 			} else if (args[i].startsWith("-a")) {
 				String account = extractArg("-a", i, args);
-				if (account == null || !isValidAccount(account))
+
+				if (account == null || !isValidAccount(account)) {
 					return false;
-				if (args[i].equals("-a")) {
-					i++;
-				}
+				} else isValid = true;
 			} else if (args[i].startsWith("-n")) {
 				String balance = extractArg("-n", i, args);
+
 				if (balance == null || !isValidBalance(balance))
 					return false;
-				if (args[i].equals("-n")) {
-					i++;
-				}
 			} else if (args[i].startsWith("-d")) {
 				String balance = extractArg("-d", i, args);
+
 				if (balance == null || !isValidBalance(balance))
 					return false;
-				if (args[i].equals("-d")) {
-					i++;
-				}
 			} else if (args[i].startsWith("-w")) {
 				String balance = extractArg("-w", i, args);
+
 				if (balance == null || !isValidBalance(balance))
 					return false;
-				if (args[i].equals("-w")) {
-					i++;
-				}
-			} else if (args[i].startsWith("-g")) {
-				if (!args[i].equals("-g")) {
-					if (verbose)
-						printUsage();
-				}
-			} else { // Invalid argument
-				if (verbose)
-					printUsage();
 			}
-			usedArgs.add(args[i]);
+
+			if (!validArgs.contains(args[i])) {
+				return false;
+			} else {
+				usedArgs.add(args[i]);
+				i++;
+			}
 		}
-		return true;
-	}
+		//tem de ter um -a, senao nao e valido
+        return isValid;
+    }
 
 	private String extractArg(String option, int i, String[] args) {
 		if (args[i].equals(option) && i + 1 >= args.length) { // -s <auth-file>
 			return null;
-		}
+		} //String teste = args[i].equals(option) ? args[i + 1] : option.substring(2);
 		return args[i].equals(option) ? args[i + 1] : option.substring(2);
 	}
 
@@ -296,7 +279,8 @@ public class ATMClient {
 
 			File file = new File(filename);
 			if (!file.exists()) {
-				System.out.print(debug ? String.format("%s: no such file\n", filename) : "");
+				//System.out.print(debug ? String.format("%s: no such file\n", filename) : "");
+				return false;
 			}
 			return matcher.matches();
 		}
@@ -329,7 +313,7 @@ public class ATMClient {
 	 */
 	// TODO rever regex para aceitar "." e ".."
 	private boolean isValidAccount(String account) {
-		if (account == null || account.isEmpty() || account.length() > 122) {
+		if (account.isEmpty() || account.length() > 122) {
 			return false;
 		}
 		String regex = "^[\\-_\\.0-9a-z]+$";
@@ -440,9 +424,9 @@ public class ATMClient {
 					out.write(key.getEncoded());
 					out.flush();
 					account.PIN = getAccountPIN(accountPINFilename);
-					System.out.println("File created and data written.");
+					//System.out.println("File created and data written.");
 				} catch (IOException e) {
-					System.out.println("An error occurred.");
+					//System.out.println("An error occurred.");
 					e.printStackTrace();
 				}
 			}

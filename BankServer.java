@@ -45,8 +45,7 @@ public class BankServer {
 
 		Security.addProvider(new BouncyCastleProvider());
 		if (!isValidArgs(args)) {
-			ERROR = EXIT_FAILURE;
-			System.exit(EXIT_FAILURE);
+			System.exit(ERROR = EXIT_FAILURE);
 		}
 
 		config = getConfigFromArgs(args);
@@ -62,9 +61,6 @@ public class BankServer {
 		try {
 			// eh siupsoto aceitarmos apenas de um porto??
 			serverSocket = new ServerSocket(config.port);
-
-			// serverSocket.setReuseAddress(true);
-			// serverSocket.bind(new InetSocketAddress(config.port));
 
 			//System.out.println("Bank server listening on port " + config.port);
 			// Continuously accept client connections
@@ -125,8 +121,6 @@ public class BankServer {
 				if (args[i].equals(ARGS_PORT)) {
 					i++;
 				}
-			} else { // Invalid argument
-				//printUsage(debug);
 			}
 		}
 
