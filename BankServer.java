@@ -1,6 +1,4 @@
 import java.io.*;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.security.*;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -253,37 +251,96 @@ public class BankServer {
 
 		private void processRequest(MessageWithSequenceNumber msgWithSeq) {
 			Account currentAccount = null;
-			if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
+			if(msgWithSeq != null){
+				if ((msgWithSeq.sequenceNumber) != (sequenceNumber + 1)) {
+					Reply reply = new Reply(Status.NOT_OK);
+					try {
+						connection.send(reply.toByteArray());
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				} else {
+					if (msgWithSeq.message.operation.op == Operations.NEW_ACCOUNT) {
+						if (msgWithSeq.message.operation.balance < 10.0) {
+							Reply reply = new Reply(Status.NOT_OK);
+							try {
+								connection.send(reply.toByteArray());
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
+						currentAccount = new Account(msgWithSeq.message.account.name,
+						msgWithSeq.message.account.PIN,
+						msgWithSeq.message.operation.balance);
+						accounts.put(msgWithSeq.message.account.name,currentAccount);
+						String outputReply = currentAccount.toJson(msgWithSeq.message.operation.op, msgWithSeq.message.operation.balance);
+						try {
+							connection.send(new Reply(Status.OK, outputReply).toByteArray());
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					} else if (msgWithSeq.message.operation.op == Operations.DEPOSIT) {
+						if (msgWithSeq.message.operation.balance > accounts.get(msgWithSeq.message.account.name).getBalance()) {
+							Reply reply = new Reply(Status.NOT_OK);
+							try {
+								connection.send(reply.toByteArray());
+								return;
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
+						if (msgWithSeq.message.account.PIN != accounts.get(msgWithSeq.message.account.name).getPin()) {
+							Reply reply = new Reply(Status.NOT_OK);
+							try {
+								connection.send(reply.toByteArray());
+								return;
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
+
+						Account clientAccount = accounts.get(msgWithSeq.message.account.name);
+						clientAccount.subBalance(msgWithSeq.message.operation.balance);
+						accounts.put(msgWithSeq.message.account.name, clientAccount);
+					} else if (msgWithSeq.message.operation.op == Operations.DEPOSIT) {
+						if (msgWithSeq.message.account.PIN != accounts.get(msgWithSeq.message.account.name).getPin()) {
+							Reply reply = new Reply(Status.NOT_OK);
+							try {
+								connection.send(reply.toByteArray());
+								return;
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
+						Account clientAccount = accounts.get(msgWithSeq.message.account.name);
+						clientAccount.addBalance(msgWithSeq.message.operation.balance);
+						accounts.put(msgWithSeq.message.account.name, clientAccount);
+
+					} else if (msgWithSeq.message.operation.op == Operations.GET) {
+						if (msgWithSeq.message.account.PIN != accounts.get(msgWithSeq.message.account.name).getPin()) {
+							Reply reply = new Reply(Status.NOT_OK);
+							try {
+								connection.send(reply.toByteArray());
+								return;
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
+						double accountBalance = accounts.get(msgWithSeq.message.account.name).getBalance();
+						Reply reply = new Reply(Status.OK, accountBalance);
+						try {
+							connection.send(reply.toByteArray());
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+				}
+			} else {
 				Reply reply = new Reply(Status.NOT_OK);
 				try {
 					connection.send(reply.toByteArray());
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
-				}
-			} else {
-				if (msgWithSeq.message.operation.op == Operations.NEW_ACCOUNT) {
-					if (msgWithSeq.message.operation.balance < 10.0) {
-						Reply reply = new Reply(Status.NOT_OK);
-						try {
-							connection.send(reply.toByteArray());
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-					currentAccount = new Account(msgWithSeq.message.account.name,
-									msgWithSeq.message.account.PIN,
-									msgWithSeq.message.operation.balance);
-					accounts.put(msgWithSeq.message.account.name,currentAccount);
-					//System.out.println(msgWithSeq.message.operation.balance);
-					String outputReply = currentAccount.toJson(msgWithSeq.message.operation.op, msgWithSeq.message.operation.balance);
-					try {
-						connection.send(new Reply(Status.OK, outputReply).toByteArray());
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
 				}
 			}
 		}
@@ -385,69 +442,6 @@ public class BankServer {
 				e.printStackTrace();
 			}
 			return msg;
-		}
-
-		// Implements the handshake protocol.
-		private boolean performHandshake() throws Exception {
-			// Step 1: Receive the client’s public key.
-			/*
-			 * byte[] clientMessage = connection.receive();
-			 * byte[] atmPublicKeyBytes =
-			 * RSAKeyUtils.decryptData(clientMessage,keyPair.getPrivate());
-			 * PublicKey atmPublicKey = RSAKeyUtils.convertToPublicKey(atmPublicKeyBytes);
-			 * this.atmPublicKey = atmPublicKey;
-			 */
-
-			// Diffie–Hellman–Merkle key exchange
-			// Generate an ephemeral ECDH key pair using the named curve "prime256v1".
-			/*
-			 * ECParameterSpec ecSpec = ECNamedCurveTable.getParameterSpec("prime256v1");
-			 * KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("ECDH",
-			 * "BC");
-			 * keyPairGenerator.initialize(ecSpec);
-			 * KeyPair ecdhKeyPair = keyPairGenerator.generateKeyPair();
-			 * // Get the encoded form of the ECDH public key.
-			 * byte[] ecdhPubKeyEncoded = ecdhKeyPair.getPublic().getEncoded();
-			 *
-			 * // Sign the ECDH public key using the server's RSA private key.
-			 * // TODO por cima disto cifrar com a pubica do atm e no lado do atm fazer o
-			 * mesmo
-			 * byte[] signature = RSAKeyUtils.signData(ecdhPubKeyEncoded,
-			 * keyPair.getPrivate());
-			 *
-			 * // Send the ECDH public key and its RSA signature.
-			 * connection.send(ecdhPubKeyEncoded);
-			 * connection.send(signature);
-			 * System.out.println("Sent ECDH public key and RSA signature.");
-			 *
-			 * // Receive the client's ECDH public key and RSA signature.
-			 * byte[] clientEcdhPubKeyEncoded = connection.receive(); // (byte[])
-			 * ois.readObject();
-			 * byte[] clientSignature = connection.receive(); // (byte[]) ois.readObject();
-			 * System.out.println("Received client's ECDH public key and RSA signature.");
-			 *
-			 * // Verify the client's signature using the client's RSA public key.
-			 * if (!RSAKeyUtils.verifySignature(clientEcdhPubKeyEncoded, clientSignature,
-			 * atmPublicKey)) {
-			 * throw new SecurityException("Client's RSA signature verification failed!");
-			 * }
-			 * System.out.println("Client's RSA signature verified.");
-			 *
-			 * // Reconstruct the client's ECDH public key.
-			 * KeyFactory keyFactory = KeyFactory.getInstance("ECDH", "BC");
-			 * X509EncodedKeySpec keySpec = new X509EncodedKeySpec(clientEcdhPubKeyEncoded);
-			 * PublicKey clientEcdhPubKey = keyFactory.generatePublic(keySpec);
-			 *
-			 * // Perform the ECDH key agreement.
-			 * KeyAgreement keyAgree = KeyAgreement.getInstance("ECDH", "BC");
-			 * keyAgree.init(ecdhKeyPair.getPrivate());
-			 * keyAgree.doPhase(clientEcdhPubKey, true);
-			 * sharedSecret = keyAgree.generateSecret();
-			 *
-			 * System.out.println("Server computed shared secret: " +
-			 * Arrays.toString(sharedSecret));
-			 */
-			return true;
 		}
 	}
 
