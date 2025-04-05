@@ -95,5 +95,9 @@ Status: To implement
 - Prevent Denial of Service: `bank` can never exit with an error code or otherwise. That would be considered a denial of service attack.
 
 
-
-
+Compilar .java
+javac -cp ".;./bcprov-lts8on-2.73.7.jar" -d class *.java
+Generate BankServer.jar:
+jar cfe ./bin/BankServer.jar BankServer -C ./class .
+Generate ATMClient.jar:
+jar cfe ./bin/ATMClient.jar ATMClient -C ./class .
