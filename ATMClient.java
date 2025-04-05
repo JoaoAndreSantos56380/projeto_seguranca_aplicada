@@ -162,7 +162,8 @@ public class ATMClient {
 	}
 
 	private boolean isValidArgs(String[] args) {
-		if (args.length < 2 || args.length > 12) {
+		// requires -a ACCOUNT -OPERATION
+		if (args.length < 3 || args.length > 12) {
 			if (verbose)
 				printUsage();
 			return false;
@@ -170,13 +171,20 @@ public class ATMClient {
 		// Set to track duplicate arguments
 		Set<String> usedArgs = new HashSet<>();
 		Set<String> validArgs = Set.of("-s", "-i", "-p", "-c", "-a", "-n", "-d", "-w", "-g");
+		Set<String> validOps = Set.of("-n", "-d", "-w", "-g");
 		boolean isValid = false;
+		int opCount = 0;
 
 		for (int i = 0; i < args.length; i++) {
 
-			// Check for duplicate argument
+			// Check for duplicate argument of the same type
 			if (usedArgs.contains(args[i])) {
 				return false;
+			}
+			//check for 2 of the same Op
+			if (validOps.contains(args[i])) {
+				opCount++;
+				if (opCount > 1) return false;
 			}
 
 			if (args[i].startsWith("-s")) {
@@ -220,6 +228,8 @@ public class ATMClient {
 
 				if (balance == null || !isValidBalance(balance))
 					return false;
+			} else if (args[i].startsWith("-g")) {
+				continue;
 			}
 
 			if (!validArgs.contains(args[i])) {
