@@ -14,7 +14,7 @@ public class Connection {
 			out = new ObjectOutputStream(socket.getOutputStream());
 			in = new ObjectInputStream(socket.getInputStream());
 		} catch (IOException e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 
@@ -23,7 +23,7 @@ public class Connection {
 			out.writeObject(arr);
 			out.flush();
 		} catch (IOException e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 
@@ -32,7 +32,7 @@ public class Connection {
 		try {
 			arr = (byte[]) in.readObject();
 		} catch (Exception e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 		return arr;
 	}
@@ -43,7 +43,7 @@ public class Connection {
 			out.close();
 			socket.close();
 		} catch (IOException e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 }

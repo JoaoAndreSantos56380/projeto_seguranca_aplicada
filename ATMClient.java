@@ -52,6 +52,7 @@ public class ATMClient {
 
 		Security.addProvider(new BouncyCastleProvider());
 
+		//args = new String[]{"   ", " -w    ","         ","                   34.33   ", "  -a                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        bob   "};
 		String[] tokens = tokenizeArgs(args);
 
 		if (!isValidArgs(tokens)) {
@@ -88,9 +89,9 @@ public class ATMClient {
 		byte[] encryptedMessage = encryptMessage(messageToEncrypt, ECDHKey);
 		// Enviar mensagem encriptada
 		connection.send(encryptedMessage);
-		// Obter "OK" ou "NOK"
-		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
 
+
+		Reply reply = (Reply) Reply.fromByteArray(connection.receive());
 
 		if (reply != null && reply.getStatus() == Status.OK) {
 			successfullExit(reply.getOutput());
@@ -559,6 +560,8 @@ public class ATMClient {
 
 		for (String arg : args) {
 			int i = 0;
+			//ATENCAO o trim() so retira espacos no incio e fim da string ex. "   ga li leu " -> "ga li leu"
+			arg = arg.trim();
 			while (i < arg.length()) {
 				if (arg.charAt(i) == '-') {
 					// Encontrou o ex. -
@@ -580,7 +583,8 @@ public class ATMClient {
 						//adicionar a lista
 						tokens.add(flagStr);
 						if (!value.isEmpty()) {
-							tokens.add(value.toString());
+							//removendo os espacos no incio e fim
+							tokens.add(value.toString().trim());
 						}
 					} else {
 						// o arg eh apenas -

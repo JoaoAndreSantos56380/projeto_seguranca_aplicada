@@ -54,6 +54,7 @@ public class BankServer {
 		config = getConfigFromArgs(args);
 
 		rsaKeyPair = createAuthFileAndKeyPair();
+		System.out.println("created");
 		// criar set de contas
 		accounts = createAccountset();// new HashMap<>();
 
@@ -95,7 +96,6 @@ public class BankServer {
 			e.printStackTrace();
 			return null;
 		}
-
 	}
 
 	private HashMap<String, Account> createAccountset() {
