@@ -71,9 +71,8 @@ public class BankServer {
 			while (!serverSocket.isClosed()) {
 				Socket clientSocket = serverSocket.accept();
 				String clientIP = clientSocket.getInetAddress().getHostAddress();
-				int clientPort = clientSocket.getPort();
-				if (TrafficMonitor.isSuspicious(clientIP+":"+clientPort)) {
-					System.out.println("IP " + clientIP+":"+clientPort + " made a big amount of requests, blocking...");
+				if (TrafficMonitor.isSuspicious(clientIP)) {
+					System.out.println("IP " + clientIP +" made a big amount of requests, blocking...");
 					clientSocket.close(); 
 				} else {
 					threadPool.submit(new ConnectionHandler(clientSocket, rsaKeyPair));
