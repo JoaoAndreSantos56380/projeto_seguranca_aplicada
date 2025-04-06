@@ -9,11 +9,11 @@ public class Operation implements Serializable{
 		this.balance = balance;
 	}
 
-	public Operations getOp() {
+	public synchronized Operations getOp() {
 		return op;
 	}
 
-	public double getBalance() {
+	public synchronized double getBalance() {
 		return balance;
 	}
 }

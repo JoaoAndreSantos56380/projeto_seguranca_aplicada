@@ -9,11 +9,11 @@ public class Message implements Serializable {
 		this.operation = operation;
 	}
 
-	public Operation getOperation() {
+	public synchronized Operation getOperation() {
 		return operation;
 	}
 
-	public ClientAccount getAccount() {
+	public synchronized ClientAccount getAccount() {
 		return account;
 	}
 }

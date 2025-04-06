@@ -1,8 +1,10 @@
 import java.io.*;
 import java.security.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,9 +36,8 @@ public class BankServer {
 	private ServerConfig config;
 	private ServerSocket serverSocket;
 	private KeyPair rsaKeyPair;
-	private final SecureRandom random = new SecureRandom();
-	private int sequenceNumber = genSeq();
-	private HashMap<String, Account> accounts;
+	private AtomicInteger sequenceNumber = genSeq();
+	private ConcurrentHashMap<String, Account> accounts = new ConcurrentHashMap<>();
 
 	public static void main(String[] args) throws IOException {
 		new BankServer(args);
@@ -55,8 +56,6 @@ public class BankServer {
 
 		rsaKeyPair = createAuthFileAndKeyPair();
 		System.out.println("created");
-		// criar set de contas
-		accounts = createAccountset();// new HashMap<>();
 
 		lauchServerSocketAndThreads();
 	}
@@ -192,9 +191,9 @@ public class BankServer {
 		return config;
 	}
 
-	public int genSeq() {
+	public AtomicInteger genSeq() {
 		SecureRandom random = new SecureRandom();
-		return random.nextInt(100000, 999999);
+		return new AtomicInteger(random.nextInt(100000, 999999));
 	}
 
 	// Handles a client connection and performs the handshake.
@@ -225,7 +224,8 @@ public class BankServer {
 					// Further processing (e.g., transaction handling) would follow here
 					ECDHAESEncryption ECDHKey = getAESKeyFromSharesSecret();
 					// Send Sequential Number
-					sendSequenctialNumber(ECDHKey);
+					int LocalSequenceNumber = sequenceNumber.get();
+					sendSequenctialNumber(ECDHKey, LocalSequenceNumber);
 
 					//socket.setSoTimeout(10000);
 					//System.out.println("Setted timeout");
@@ -233,7 +233,7 @@ public class BankServer {
 					MessageWithSequenceNumber msgWithSeq = receiveMessage(ECDHKey);
 
 					try {
-						processRequest(msgWithSeq);
+						processRequest(msgWithSeq, LocalSequenceNumber);
 					} catch (IOException e) {
 						//System.exit(ERROR = EXIT_FAILURE);
 					}
@@ -252,12 +252,10 @@ public class BankServer {
 			}
 		}
 
-		private void processRequest(MessageWithSequenceNumber msgWithSeq) throws IOException {
-
+		private void processRequest(MessageWithSequenceNumber msgWithSeq, int LocalSequenceNumber) throws IOException {
 			Account currentAccount = null;
-
-			if (msgWithSeq != null && msgWithSeq.getMessage().getOperation() != null && msgWithSeq.getMessage().getOperation().getOp() != null && msgWithSeq.getSequenceNumber() == (sequenceNumber + 1)) {
-
+			if (msgWithSeq != null && msgWithSeq.getMessage().getOperation() != null && msgWithSeq.getMessage().getOperation().getOp() != null && msgWithSeq.getSequenceNumber() == (LocalSequenceNumber + 1)) {
+				sequenceNumber.incrementAndGet();
 				Message m = msgWithSeq.getMessage();
 				Operations op = m.getOperation().getOp();
 				boolean exists = false;
@@ -271,9 +269,7 @@ public class BankServer {
 					currentAccount = new Account(m.getAccount().name);
 					//accounts.put(m.account.name, currentAccount);
 				}
-
 				switch (op) {
-
 					case NEW_ACCOUNT:
 						//caso ja exista a conta nao se pode criar novamente
 						if (m.getOperation().getBalance() < 10.0 || exists) {
@@ -352,11 +348,10 @@ public class BankServer {
 			return decryptMessage(bytes, ECDHKey);
 		}
 
-		private void sendSequenctialNumber(ECDHAESEncryption ECDHKey) {
+		private void sendSequenctialNumber(ECDHAESEncryption ECDHKey, int seqNum) {
 			byte[] EncryptedMessageSend = null;
 			try {
-				EncryptedMessageSend = ECDHKey.encrypt(ByteBuffer.allocate(4).putInt(sequenceNumber+1).array());
-				sequenceNumber++;
+				EncryptedMessageSend = ECDHKey.encrypt(ByteBuffer.allocate(4).putInt(seqNum).array());
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
