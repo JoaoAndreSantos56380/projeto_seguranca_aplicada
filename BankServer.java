@@ -7,7 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -25,7 +25,8 @@ public class BankServer {
 	private static final String ARGS_AUTH_FILE = "-s";
 	private static final String DEFAULT_AUTH_FILE = "bank.auth";
 	private static final String ARGS_PORT = "-p";
-	private static final int DEFAULT_PORT = 3000;
+	private static int DEFAULT_PORT = 3000;
+	private static final String DEFAULT_IP = "127.0.0.1";
 	private static final int EXIT_FAILURE = 255;
 	private static final int PROTOCOL_ERROR = 63;
 	private static final int EXIT_SUCCESS = 0;
@@ -63,11 +64,10 @@ public class BankServer {
 	private void lauchServerSocketAndThreads() {
 		try {
 			// eh siupsoto aceitarmos apenas de um porto??
-			serverSocket = new ServerSocket(config.port);
+			serverSocket = new ServerSocket(config.port, 0, InetAddress.getByName(DEFAULT_IP));
 			//System.out.println("Bank server listening on port " + config.port);
 			// Continuously accept client connections
 			// Socket clientSocket = serverSocket.accept();
-
 			while (!serverSocket.isClosed()) {
 				Socket clientSocket = serverSocket.accept();
 				String clientIP = clientSocket.getInetAddress().getHostAddress();

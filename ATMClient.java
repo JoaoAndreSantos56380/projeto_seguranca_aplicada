@@ -30,9 +30,9 @@ public class ATMClient {
 	private static final int EXIT_SUCCESS = 0;
 	private static final int PROTOCOL_ERROR = 63;
 	private static int ERROR = EXIT_FAILURE;
-	private static final String SERVER_IP = "127.0.0.1";
-	private static final int SERVER_PORT = 3000;
-	private static final String DEFAULT_AUTH_FILE = "bank.auth"; // Shared auth file
+	private static String SERVER_IP = "127.0.0.1";
+	private static int SERVER_PORT = 3000;
+	private static String DEFAULT_AUTH_FILE = "bank.auth"; // Shared auth file
 	private static final String CARD_FILE = "card.file"; // Shared auth file
 
 	private static final boolean verbose = false;
@@ -380,27 +380,25 @@ public class ATMClient {
 	}
 
 	private ATMConfig getConfigFromArgs(String[] args) {
-		config = new ATMConfig(DEFAULT_AUTH_FILE, SERVER_IP, SERVER_PORT);
-
 		for (int i = 0; i < args.length; i++) {
 			if (args[i].startsWith("-s")) {
-				config.serverAuthFile = extractArg("-s", i, args);
+				DEFAULT_AUTH_FILE = extractArg("-s", i, args);
 				if (args[i].equals("-s")) {
 					i++;
 				}
 			} else if (args[i].startsWith("-i")) {
-				config.serverIp = extractArg("-i", i, args);
+				SERVER_IP = extractArg("-i", i, args);
 				if (args[i].equals("-i")) {
 					i++;
 				}
 			} else if (args[i].startsWith("-p")) {
-				config.serverPort = Integer.parseInt(extractArg("-p", i, args));
+				SERVER_PORT = Integer.parseInt(extractArg("-p", i, args));
 				if (args[i].equals("-p")) {
 					i++;
 				}
 			}
 		}
-
+		config = new ATMConfig(DEFAULT_AUTH_FILE, SERVER_IP, SERVER_PORT);
 		return config;
 	}
 
