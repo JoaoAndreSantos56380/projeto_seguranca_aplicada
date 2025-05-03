@@ -1,10 +1,10 @@
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+import java.io.*;
+import java.util.concurrent.*;
 
 public class MITM {
 
@@ -12,6 +12,7 @@ public class MITM {
 	private final String remoteHost;
 	private final int remotePort;
 	private final String op;
+	private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
 	public MITM(int listenPort, String remoteHost, int remotePort, String op) {
 		this.listenPort = listenPort;
@@ -34,7 +35,7 @@ public class MITM {
 				case "r":  // Replay attack
 					System.out.printf("Initiating Replay Attack \n");
 					new Thread(() -> replayAttack(clientSocket, serverSocketToRemote)).start();
-					new Thread(() -> replayAttack(serverSocketToRemote, clientSocket)).start();
+					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
 					break;
 
 				case "t":  // Timeout attack
@@ -43,9 +44,9 @@ public class MITM {
 					//new Thread(() -> timeoutAttack(serverSocketToRemote, clientSocket)).start();
 					break;
 
-				case "d":  // Timeout attack
-					System.out.printf("Initiating Drop Attack \n");
-					new Thread(() -> forwardData(clientSocket, serverSocketToRemote)).start();
+				case "f":  // Byte Flip attack
+					System.out.printf("Initiating Byte Flip Attack \n");
+					new Thread(() -> byteFlip(clientSocket, serverSocketToRemote)).start();
 					new Thread(() -> byteFlip(serverSocketToRemote, clientSocket)).start();
 					break;
 
@@ -53,6 +54,13 @@ public class MITM {
 					System.out.printf("Initiating Print Size of Packets \n");
 					new Thread(() -> forwardDataSize(clientSocket, serverSocketToRemote)).start();
 					new Thread(() -> forwardDataSize(serverSocketToRemote, clientSocket)).start();
+					break;
+
+				case "d":  // Connect and Disconnect attack
+					System.out.printf("Initiating Connect & Disconnect Attack\n");
+					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+					connectAndDisconnect(clientSocket, 500);
+					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
 					break;
 
 				default:   // Normal forward
@@ -119,6 +127,25 @@ public class MITM {
 		}
 	}
 
+	public static void connectAndDisconnect(Socket inputSocket, int delayMillis) {
+		try {
+			Thread.sleep(delayMillis);
+			System.out.println("Disconnecting abruptly...");
+			inputSocket.setSoLinger(true, 0);  // Forces a TCP RST on close
+			inputSocket.close();
+		} catch (IOException | InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			if (inputSocket != null && !inputSocket.isClosed()) {
+				try {
+					inputSocket.close();
+				} catch (IOException ignored) {
+				}
+			}
+		}
+	}
+
+
 	private void byteFlip(Socket inputSocket, Socket outputSocket) {
 		try (InputStream in = inputSocket.getInputStream();
 			 OutputStream out = outputSocket.getOutputStream()) {
@@ -135,13 +162,20 @@ public class MITM {
 				} else {
 					delayedPacket = new byte[bytesRead];
 					System.arraycopy(buffer, 0, delayedPacket, 0, bytesRead);
-					delayedPacket[2] = (byte) 560;
-					//System.out.println(Arrays.toString(delayedPacket));
+
+					for (int i = 0; i < delayedPacket.length; i++) {
+						if (delayedPacket[i] == (byte) 124) {
+							//remover o |
+							//delayedPacket[i] = 105;
+							delayedPacket[i-5] = 124;
+							System.out.println("Found '|' (124) at position: " + i);
+						}
+					}
+					System.out.println(Arrays.toString(delayedPacket));
 					out.write(delayedPacket, 0, bytesRead);
 					out.flush();
 				}
 				count++;
-
 			}
 		} catch (IOException e) {
 			// Connection closed or error – terminate forwarding
@@ -163,13 +197,33 @@ public class MITM {
 
 			byte[] buffer = new byte[4096];
 			int bytesRead;
-			int n = 2; //num of replays
+			int messageCount = 0;
+
 			while ((bytesRead = in.read(buffer)) != -1) {
-				for(int i = 0; i < n; i++) {
-					out.write(buffer, 0, bytesRead);
-					out.flush();
+				messageCount++;
+				// Immediately forward original message
+				out.write(buffer, 0, bytesRead);
+				out.flush();
+
+				// Make a copy of the message to replay later
+				byte[] messageCopy = new byte[bytesRead];
+				System.arraycopy(buffer, 0, messageCopy, 0, bytesRead);
+
+				// If it's one of the first 2 client messages, schedule replay
+				if (messageCount == 1 || messageCount == 2) {
+					int finalMessageCount = messageCount;
+					scheduler.schedule(() -> {
+						try {
+							out.write(messageCopy);
+							out.flush();
+							System.out.println("Replayed client message #" + finalMessageCount + " of size " + messageCopy.length);
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}, 20, TimeUnit.MILLISECONDS);
 				}
 			}
+
 		} catch (IOException e) {
 			// Connection closed or error – terminate forwarding
 		} finally {
@@ -181,8 +235,10 @@ public class MITM {
 				outputSocket.close();
 			} catch (IOException ignored) {
 			}
+			scheduler.shutdown();
 		}
 	}
+
 	private void timeoutAttack(int seconds){
 		System.out.println("Sleeping for " + seconds + " seconds via TimeUnit...");
 		try {
@@ -211,3 +267,41 @@ public class MITM {
 		System.exit(0);
 	}
 }
+
+class ObjectHexDeserializer {
+
+	public static <T> T deserializeFromHex(String hexString, Class<T> clazz)
+			throws IOException, ClassNotFoundException {
+
+		byte[] dataBytes = decodeHex(hexString);
+
+		try (ByteArrayInputStream byteIn = new ByteArrayInputStream(dataBytes);
+			 ObjectInputStream in = new ObjectInputStream(byteIn)) {
+			return clazz.cast(in.readObject());
+		}
+	}
+
+	public static byte[] decodeHex(String hex) throws IllegalArgumentException {
+		if (hex.length() % 2 != 0) {
+			throw new IllegalArgumentException("Invalid hexadecimal string length.");
+		}
+
+		int len = hex.length();
+		byte[] data = new byte[len / 2];
+
+		for (int i = 0; i < len; i += 2) {
+			int firstDigit = Character.digit(hex.charAt(i), 16);
+			int secondDigit = Character.digit(hex.charAt(i + 1), 16);
+
+			if (firstDigit == -1 || secondDigit == -1) {
+				throw new IllegalArgumentException("Invalid character in hex string.");
+			}
+
+			data[i / 2] = (byte) ((firstDigit << 4) + secondDigit);
+		}
+
+		return data;
+	}
+}
+
+
