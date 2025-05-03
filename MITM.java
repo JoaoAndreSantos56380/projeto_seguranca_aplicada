@@ -165,6 +165,7 @@ public class MITM {
 
 					for (int i = 0; i < delayedPacket.length; i++) {
 						if (delayedPacket[i] == (byte) 124) {
+
 							//remover o |
 							//delayedPacket[i] = 105;
 							delayedPacket[i-5] = 124;
