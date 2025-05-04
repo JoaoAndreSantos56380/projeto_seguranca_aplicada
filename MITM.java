@@ -2,8 +2,8 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
-import java.io.*;
 import java.util.concurrent.*;
 
 public class MITM {
@@ -11,26 +11,28 @@ public class MITM {
 	private final int listenPort;
 	private final String remoteHost;
 	private final int remotePort;
-	private final String op;
 	private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-	public MITM(int listenPort, String remoteHost, int remotePort, String op) {
+	public MITM(int listenPort, String remoteHost, int remotePort) {
 		this.listenPort = listenPort;
 		this.remoteHost = remoteHost;
 		this.remotePort = remotePort;
-		this.op = op;
 	}
 
 	public void start() throws IOException {
 		ServerSocket serverSocket = new ServerSocket(listenPort);
-		System.out.printf("Proxy listening on port %d, forwarding to %s:%d%n",
-				listenPort, remoteHost, remotePort);
-
-		while (true) {
+		System.out.printf("Proxy listening on port %d, forwarding to %s:%d%n", listenPort, remoteHost, remotePort);
+		Scanner sc = new Scanner(System.in);
+		String op = null;
+		while (/* !((op = sc.nextLine()).equals("quit")) */true) {
+			System.out.println("Enter operation (r/t/f/p/d/n) or 'quit' to exit:");
+			op = sc.nextLine();
+			if (op.equals("quit")){
+				break;
+			}
 			Socket clientSocket = serverSocket.accept();
 			Socket serverSocketToRemote = new Socket(remoteHost, remotePort);
 			System.out.printf("Accepted connection from %s, connected to remote.%n", clientSocket.getRemoteSocketAddress());
-
 			switch (op) {
 				case "r":  // Replay attack
 					System.out.printf("Initiating Replay Attack \n");
@@ -62,13 +64,20 @@ public class MITM {
 					connectAndDisconnect(clientSocket, 500);
 					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
 					break;
-
-				default:   // Normal forward
+				case "n":
 					new Thread(() -> forwardData(clientSocket, serverSocketToRemote)).start();
 					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
 					break;
+				default:   // Normal forward
+					System.out.println("incorrect argument. insert another:");
+					break;//op = sc.nextLine();
+					/* new Thread(() -> forwardData(clientSocket, serverSocketToRemote)).start();
+					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+					break; */
 			}
 		}
+		sc.close();
+		serverSocket.close();
 	}
 
 	private void forwardData(Socket inputSocket, Socket outputSocket) {
@@ -144,7 +153,6 @@ public class MITM {
 			}
 		}
 	}
-
 
 	private void byteFlip(Socket inputSocket, Socket outputSocket) {
 		try (InputStream in = inputSocket.getInputStream();
@@ -252,8 +260,8 @@ public class MITM {
 	}
 
 	public static void main(String[] args) {
-		if (args.length != 4) {
-			System.err.println("Usage: java SimpleMITMProxy <listenPort> <remoteHost> <remotePort> <operation>");
+		if (args.length != 3) {
+			System.err.println("Usage: java SimpleMITMProxy <listenPort> <remoteHost> <remotePort>");
 			System.exit(1);
 		}
 		int listenPort = Integer.parseInt(args[0]);
@@ -261,7 +269,7 @@ public class MITM {
 		int remotePort = Integer.parseInt(args[2]);
 
 		try {
-			new MITM(listenPort, remoteHost, remotePort, args[3]).start();
+			new MITM(listenPort, remoteHost, remotePort/* , args[3] */).start();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
