@@ -49,7 +49,8 @@ public class MITM {
 				case "f":  // Byte Flip attack
 					System.out.printf("Initiating Byte Flip Attack \n");
 					new Thread(() -> byteFlip(clientSocket, serverSocketToRemote)).start();
-					new Thread(() -> byteFlip(serverSocketToRemote, clientSocket)).start();
+					//new Thread(() -> byteFlip(serverSocketToRemote, clientSocket)).start();
+					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
 					break;
 
 				case "p":  // Timeout attack
@@ -86,9 +87,14 @@ public class MITM {
 
 			byte[] buffer = new byte[4096];
 			int bytesRead;
+			boolean count = true;
 			while ((bytesRead = in.read(buffer)) != -1) {
 				out.write(buffer, 0, bytesRead);
-				//System.out.println(Arrays.toString(buffer));
+				System.out.println(bytesRead);
+				//if (count){//bytesRead < 100) {
+				//	count = false;
+					//System.out.println(Arrays.toString(buffer));
+				//}
 				out.flush();
 			}
 		} catch (IOException e) {
@@ -171,16 +177,17 @@ public class MITM {
 					delayedPacket = new byte[bytesRead];
 					System.arraycopy(buffer, 0, delayedPacket, 0, bytesRead);
 
-					for (int i = 0; i < delayedPacket.length; i++) {
-						if (delayedPacket[i] == (byte) 124) {
+					System.out.println("\n Bytes Read: " + bytesRead);
+					System.out.println("\n Original Array: ");
+					System.out.println(Arrays.toString(buffer).substring(0, 100));
 
-							//remover o |
-							//delayedPacket[i] = 105;
-							delayedPacket[i-5] = 124;
-							System.out.println("Found '|' (124) at position: " + i);
-						}
-					}
+					delayedPacket[0] = (byte) 2;
+					delayedPacket[1] = (byte) 5;
+					System.out.println("\n Flipped indexes 0 and 1 of the Array to " + delayedPacket[0] + " and " + delayedPacket[1] + "!\n");
+
+					//System.out.println(delayedPacket.length);
 					System.out.println(Arrays.toString(delayedPacket));
+					System.out.println("\n Sending altered array...");
 					out.write(delayedPacket, 0, bytesRead);
 					out.flush();
 				}
