@@ -1,9 +1,9 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.Key;
 import java.util.Arrays;
 import java.util.Scanner;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.*;
 public class MITM {
 
@@ -35,35 +35,94 @@ public class MITM {
 					clientSocket.getRemoteSocketAddress());
 			switch (ops[0]) {
 				case "r": // Replay attack
-					System.out.printf("Initiating Replay Attack \n");
-					new Thread(() -> replayAttack(clientSocket, serverSocketToRemote)).start();
-					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+					switch (ops[1]) {
+						case "6":
+							System.out.printf("Initiating Replay Attack \n");
+							new Thread(() -> replayAttack(clientSocket, serverSocketToRemote)).start();
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							break;
+						case "11":
+							System.out.printf("Initiating Replay Attack \n");
+							new Thread(() -> replayAttack(clientSocket, serverSocketToRemote)).start();
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							break;
+						default:
+							System.out.println("incorrect argument. insert another:");
+							break;
+					}
 					break;
-
 				case "t": // Timeout attack
-					System.out.printf("Initiating Timeout Attack \n");
-					// new Thread(() -> timeoutAttack(clientSocket, serverSocketToRemote)).start();
-					// new Thread(() -> timeoutAttack(serverSocketToRemote, clientSocket)).start();
+					switch (ops[1]) {
+						case "6":
+							System.out.printf("Initiating Timeout Attack \n");
+							// new Thread(() -> timeoutAttack(clientSocket, serverSocketToRemote)).start();
+							// new Thread(() -> timeoutAttack(serverSocketToRemote, clientSocket)).start();
+							break;
+						case "11":
+							System.out.printf("Initiating Timeout Attack \n");
+							// new Thread(() -> timeoutAttack(clientSocket, serverSocketToRemote)).start();
+							// new Thread(() -> timeoutAttack(serverSocketToRemote, clientSocket)).start();
+							break;
+						default:
+							System.out.println("incorrect argument. insert another:");
+							break;
+					}
 					break;
-
 				case "f": // Byte Flip attack
-					System.out.printf("Initiating Byte Flip Attack \n");
-					new Thread(() -> byteFlip(clientSocket, serverSocketToRemote)).start();
-					// new Thread(() -> byteFlip(serverSocketToRemote, clientSocket)).start();
-					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+					switch (ops[1]) {
+						case "6":
+							System.out.printf("Initiating Byte Flip Attack \n");
+							new Thread(() -> byteFlip(clientSocket, serverSocketToRemote)).start();
+							// new Thread(() -> byteFlip(serverSocketToRemote, clientSocket)).start();
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							break;
+						case "11":
+							System.out.printf("Initiating Byte Flip Attack \n");
+							new Thread(() -> byteFlip(clientSocket, serverSocketToRemote)).start();
+							// new Thread(() -> byteFlip(serverSocketToRemote, clientSocket)).start();
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							break;
+						default:
+							System.out.println("incorrect argument. insert another:");
+							break;
+					}
 					break;
-
 				case "p": // print packet size
-					System.out.printf("Initiating Print Size of Packets \n");
-					new Thread(() -> forwardDataSize(clientSocket, serverSocketToRemote)).start();
-					new Thread(() -> forwardDataSize(serverSocketToRemote, clientSocket)).start();
+					switch (ops[1]) {
+						case "6":
+							System.out.printf("Initiating Print Size of Packets \n");
+							new Thread(() -> forwardDataSize(clientSocket, serverSocketToRemote)).start();
+							new Thread(() -> forwardDataSize(serverSocketToRemote, clientSocket)).start();
+							break;
+						case "11":
+							System.out.printf("Initiating Print Size of Packets \n");
+							new Thread(() -> forwardDataSize(clientSocket, serverSocketToRemote)).start();
+							new Thread(() -> forwardDataSize(serverSocketToRemote, clientSocket)).start();
+							break;
+						default:
+							System.out.println("incorrect argument. insert another:");
+							break;
+					}
 					break;
 
 				case "d": // Connect and Disconnect attack
-					System.out.printf("Initiating Connect & Disconnect Attack\n");
-					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
-					connectAndDisconnect(clientSocket, 500);
-					new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+					switch (ops[1]) {
+						case "6":
+							System.out.printf("Initiating Connect & Disconnect Attack\n");
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							connectAndDisconnect(clientSocket, 500);
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							break;
+						case "11":
+							System.out.printf("Initiating Connect & Disconnect Attack\n");
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							connectAndDisconnect(clientSocket, 500);
+							new Thread(() -> forwardData(serverSocketToRemote, clientSocket)).start();
+							break;
+						default:
+							System.out.println("incorrect argument. insert another:");
+							break;
+					}
 					break;
 				case "n":
 					switch (ops[1]) {
@@ -81,10 +140,21 @@ public class MITM {
 					}
 					break;
 				case "i": // weaker integrity attack
-					// ligar ao servidor e fazer autenticacao normal e fazer um pedido de criacao de
-					// conta
-					new Thread(() -> connectAndAuthenticateWithBank(clientSocket, serverSocketToRemote)).start();
-					new Thread(() -> connectAndAuthenticateWithATM(serverSocketToRemote, clientSocket)).start();
+					switch (ops[1]) {
+						case "6":
+							// ligar ao servidor e fazer autenticacao normal e fazer um pedido de criacao de
+							// conta
+							new Thread(() -> connectAndAuthenticateWithBank(clientSocket, serverSocketToRemote)).start();
+							new Thread(() -> connectAndAuthenticateWithATM(serverSocketToRemote, clientSocket)).start();
+							break;
+						case "11":
+							new Thread(() -> connectAndAuthenticateWithBank(clientSocket, serverSocketToRemote)).start();
+							new Thread(() -> connectAndAuthenticateWithATM(serverSocketToRemote, clientSocket)).start();
+							break;
+						default:
+							System.out.println("incorrect argument. insert another:");
+							break;
+					}
 					break;
 				default: // incorrect argument
 					System.out.println("incorrect argument. insert another:");
@@ -106,18 +176,8 @@ public class MITM {
 	}
 
 	private void connectAndAuthenticateWithBank(Socket clientSocket, Socket serverSocketToRemote) {
+		//ligar-me ao banco e fazer autenticacao normal
 
-		AuthFileLoader authFileLoader = new AuthFileLoader();
-		authFileLoader.load(config.getAuthFile());
-
-		AuthFileData authFileData = authFileLoader.getData();
-
-		Key key = AESUtils.generateKey();
-		byte[] keyBytes = AESUtils.getKeyBytes(key);
-
-		SecurityContext securityContext = new SecurityContext(keyBytes, authFileData.getBankPublicKey());
-
-		BankClient client = new BankClient(config.getIpAddress(), config.getPort(), securityContext);
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("Unimplemented method 'connectAndAuthenticate'");
 	}
